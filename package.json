@@ -8,6 +8,6 @@
     "build": "npx --prefix frontend react-scripts build",
     "start": "npm run build && node backend/server.js"
   },
-  "author": "",
+  "author": "", 
   "license": "ISC"
 }
