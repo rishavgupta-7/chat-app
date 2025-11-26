@@ -1,0 +1,13 @@
+{
+  "name": "social-app",
+  "version": "1.0.0",
+  "description": "Social media app with frontend and backend on the same server",
+  "main": "index.js",
+  "scripts": {
+    "install": "npm install --prefix backend && npm install --prefix frontend",
+    "build": "npm run build --prefix frontend",
+    "start": "npm run build && node backend/server.js"
+  },
+  "author": "",
+  "license": "ISC"
+}
