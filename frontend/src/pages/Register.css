@@ -1,0 +1,154 @@
+/* === Main Layout === */
+.main-container {
+  min-height: 100vh;
+  display: flex;
+  background: #f3f4f6; /* light gray */
+  font-family: Arial, sans-serif;
+}
+
+/* === Left Side (Decoration Area) === */
+.left-container {
+  width: 50%;
+  background: linear-gradient(135deg, #1e3a8a, #2563eb); /* blue gradient */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 32px;
+  font-weight: bold;
+  letter-spacing: 1px;
+}
+
+/* You can put image or text inside left-container if needed */
+
+/* === Right Side === */
+.right-container {
+  width: 50%;
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 60px 50px;
+  text-align: center;
+  box-shadow: 0 10px 35px rgba(0,0,0,0.12);
+  border-top-right-radius: 20px;
+  border-bottom-right-radius: 20px;
+  border-left: 1px solid #e5e7eb;
+  background: linear-gradient(180deg, #ffffff 0%, #f9f9f9 100%);
+}
+
+.right-container h2 {
+  font-size: 32px;
+  font-weight: 700;
+  color: #2563eb;
+  margin-bottom: 20px;
+}
+
+/* === Error Message === */
+.error {
+  background: #ffebeb;
+  padding: 12px;
+  border-left: 5px solid #d32f2f;
+  color: #b71c1c;
+  border-radius: 6px;
+  margin-bottom: 15px;
+  font-weight: 600;
+}
+
+/* === Form === */
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  margin-bottom: 15px;
+}
+
+input {
+  width: 100%;
+  padding: 14px;
+  font-size: 16px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  outline: none;
+  transition: 0.2s;
+}
+
+input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 5px rgba(37,99,235,0.4);
+}
+
+button {
+  padding: 14px;
+  background: #2563eb;
+  color: white;
+  font-size: 18px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: 0.2s;
+  font-weight: 600;
+}
+
+button:hover {
+  background: #1d4ed8;
+}
+
+/* === Register Link === */
+.right-container p {
+  margin-top: 10px;
+  font-size: 15px;
+}
+
+.right-container a {
+  color: #2563eb;
+  font-weight: 600;
+}
+
+/* === Responsive === */
+@media (max-width: 900px) {
+  .main-container {
+    flex-direction: column;
+  }
+  .left-container, .right-container {
+    width: 100%;
+  }
+  .right-container {
+    padding: 30px;
+  }
+}
+/*auth-container*/
+.auth-container {
+  width: 100%;
+  max-width: 380px;
+  background: #ffffff;
+  padding: 35px 30px;
+  border-radius: 20px;
+  box-shadow: 0px 8px 25px rgba(0, 0, 0, 0.08);
+  border: 1px solid #e6e6e6;
+  animation: fadeIn 0.4s ease;
+}
+
+.auth-container h2 {
+  text-align: center;
+  margin-bottom: 22px;
+  font-size: 26px;
+  color: #222;
+}
+
+/* Inputs */
+.auth-container input {
+  width: 100%;
+  padding: 12px 14px;
+  margin-bottom: 15px;
+  border: 1.5px solid #dcdcdc;
+  border-radius: 10px;
+  font-size: 15px;
+  transition: 0.2s;
+}
+
+.auth-container input:focus {
+  border-color: #7a5cff;
+  box-shadow: 0 0 5px rgba(122, 92, 255, 0.3);
+  outline: none;
+}

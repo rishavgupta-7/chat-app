@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+
+.auth-container {
+  width: 300px;
+  margin: 60px auto;
+  padding: 25px;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  text-align: center;
+}
+.auth-container input {
+  width: 90%;
+  margin: 8px 0;
+  padding: 8px;
+}
+button {
+  padding: 8px 15px;
+  margin-top: 10px;
+  background-color: #2b65ec;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
