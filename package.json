@@ -2,11 +2,14 @@
   "name": "social-app",
   "version": "1.0.0",
   "description": "Social media app with frontend and backend on the same server",
-  "main": "index.js",
+  "main": "backend/server.js",
   "scripts": {
-    "install": "npm install --prefix backend && npm install --prefix frontend",
+    "postinstall": "npm install --prefix backend && npm install --prefix frontend",
     "build": "npm run build --prefix frontend",
-    "start": "npm run build && node backend/server.js"
+    "start": "node backend/server.js"
+  },
+  "engines": {
+    "node": "18.x"
   },
   "author": "",
   "license": "ISC"

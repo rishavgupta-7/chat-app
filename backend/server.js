@@ -5,36 +5,52 @@ import dotenv from "dotenv";
 import cors from "cors";
 import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
+import path from "path";                  // ⭐ UPDATED
+import { fileURLToPath } from "url";      // ⭐ UPDATED
+
 import connectDB from "./config/db.js";
 import authRoutes from "./routes/authRoutes.js";
 import User from "./models/User.js";
 import Message from "./models/Message.js";
-
-// ai
 import aiRoutes from "./routes/aiRoutes.js";
 
 dotenv.config();
 connectDB();
 
+// ⭐ REQUIRED FOR SERVING FRONTEND BUILD
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 // ---- CORS ORIGINS ----
 const allowedOrigins = [
   "http://localhost:3000",
-  process.env.CLIENT_URL   // ⭐ Add this on Render
+  process.env.CLIENT_URL // ⭐ your Render frontend URL
 ];
 
 // --- EXPRESS APP ---
 const app = express();
 
-app.use(cors({
-  origin: allowedOrigins,
-  credentials: true,
-}));
+app.use(
+  cors({
+    origin: allowedOrigins,
+    credentials: true,
+  })
+);
 
 app.use(express.json());
 app.use("/api/auth", authRoutes);
 app.use("/api/ai", aiRoutes);
 
-app.get("/", (req, res) => res.send("✅ Server running"));
+app.get("/api", (req, res) => res.send("API running ✔"));
+
+// ⭐⭐⭐ FRONTEND BUILD SERVING (CRUCIAL FOR RENDER) ⭐⭐⭐
+const frontendPath = path.join(__dirname, "../frontend/build");
+app.use(express.static(frontendPath));
+
+// ⭐ Catch-all route: send React index.html
+app.get("*", (req, res) => {
+  res.sendFile(path.join(frontendPath, "index.html"));
+});
 
 // --- HTTP SERVER ---
 const server = http.createServer(app);
@@ -44,7 +60,7 @@ const io = new Server(server, {
   cors: {
     origin: allowedOrigins,
     methods: ["GET", "POST"],
-    credentials: true
+    credentials: true,
   },
   transports: ["websocket", "polling"],
 });
@@ -84,7 +100,9 @@ io.on("connection", async (socket) => {
 
       const sender = await User.findById(msg.senderId);
       if (sender?.socketId) {
-        io.to(sender.socketId).emit("messageDelivered", { messageId: msg._id.toString() });
+        io.to(sender.socketId).emit("messageDelivered", {
+          messageId: msg._id.toString(),
+        });
       }
     }
   } catch (err) {
@@ -107,7 +125,9 @@ io.on("connection", async (socket) => {
     try {
       const receiver = await User.findById(receiverId);
       if (receiver?.socketId) {
-        io.to(receiver.socketId).emit("stopTyping", { senderId: socket.userId });
+        io.to(receiver.socketId).emit("stopTyping", {
+          senderId: socket.userId,
+        });
       }
     } catch (err) {
       console.error("StopTyping error:", err.message);
@@ -141,11 +161,12 @@ io.on("connection", async (socket) => {
 
       if (receiver.socketId) {
         io.to(receiver.socketId).emit("receiveMessage", payload);
-        io.to(socket.id).emit("messageDelivered", { messageId: payload._id });
+        io.to(socket.id).emit("messageDelivered", {
+          messageId: payload._id,
+        });
       }
 
       io.to(socket.id).emit("receiveMessage", payload);
-
     } catch (err) {
       console.error("Send message error:", err.message);
     }
@@ -272,11 +293,16 @@ app.get("/api/chats/:userId", async (req, res) => {
     }).sort({ createdAt: -1 });
 
     const partnerIds = [
-      ...new Set(messages.map((m) => (m.senderId == userId ? m.receiverId : m.senderId))),
+      ...new Set(
+        messages.map((m) =>
+          m.senderId == userId ? m.receiverId : m.senderId
+        )
+      ),
     ];
 
-    const users = await User.find({ _id: { $in: partnerIds } })
-      .select("name phone socketId");
+    const users = await User.find({ _id: { $in: partnerIds } }).select(
+      "name phone socketId"
+    );
 
     res.json(users);
   } catch (err) {
