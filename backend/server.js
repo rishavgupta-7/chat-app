@@ -17,16 +17,16 @@ import aiRoutes from "./routes/aiRoutes.js";
 dotenv.config();
 connectDB();
 
-// ⭐ REQUIRED FOR SERVING FRONTEND BUILD
+// ===== REQUIRED FOR SERVING FRONTEND BUILD =====
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// ---- CORS ORIGINS ----
+// ===== CORS =====
 const allowedOrigins = [
-  process.env.CLIENT_URL || "*", // ⭐ NO localhost, dynamic for Render
+  process.env.CLIENT_URL || "*", // Render frontend URL
 ];
 
-// --- EXPRESS APP ---
+// ===== EXPRESS APP =====
 const app = express();
 
 app.use(
@@ -37,24 +37,25 @@ app.use(
 );
 
 app.use(express.json());
+
 app.use("/api/auth", authRoutes);
 app.use("/api/ai", aiRoutes);
 
 app.get("/api", (req, res) => res.send("API running ✔"));
 
-// ⭐⭐⭐ SERVE FRONTEND BUILD (IMPORTANT) ⭐⭐⭐
+// ===== SERVE FRONTEND BUILD =====
 const frontendPath = path.join(__dirname, "../frontend/build");
 app.use(express.static(frontendPath));
 
-// ⭐ FIX for Express v5 — regex catch-all
+// EXPRESS v5 wildcard FIX (must use regex)
 app.get(/.*/, (req, res) => {
   res.sendFile(path.join(frontendPath, "index.html"));
 });
 
-// --- HTTP SERVER ---
+// ===== HTTP SERVER =====
 const server = http.createServer(app);
 
-// --- SOCKET.IO ---
+// ===== SOCKET.IO =====
 const io = new Server(server, {
   cors: {
     origin: allowedOrigins,
@@ -63,75 +64,32 @@ const io = new Server(server, {
   transports: ["websocket", "polling"],
 });
 
-// --- SOCKET AUTH ---
+// ===== SOCKET AUTH =====
 io.use(async (socket, next) => {
   try {
     const token = socket.handshake.auth.token;
-    if (!token) return next(new Error("No token provided"));
+    if (!token) return next(new Error("No token"));
+
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     socket.userId = decoded.id;
     next();
   } catch (err) {
-    console.log("❌ Socket auth failed:", err.message);
     next(new Error("Authentication error"));
   }
 });
 
-// --- SOCKET CONNECTION ---
+// ===== SOCKET EVENTS =====
 io.on("connection", async (socket) => {
   const userId = socket.userId;
 
   try {
     await User.findByIdAndUpdate(userId, { socketId: socket.id });
-    console.log(`🟢 User ${userId} connected (socket: ${socket.id})`);
-
-    const undelivered = await Message.find({
-      receiverId: userId,
-      delivered: { $ne: true },
-    });
-
-    for (const msg of undelivered) {
-      io.to(socket.id).emit("receiveMessage", msg);
-      msg.delivered = true;
-      await msg.save();
-
-      const sender = await User.findById(msg.senderId);
-      if (sender?.socketId) {
-        io.to(sender.socketId).emit("messageDelivered", {
-          messageId: msg._id.toString(),
-        });
-      }
-    }
+    console.log(`🟢 User ${userId} connected (${socket.id})`);
   } catch (err) {
-    console.error("Socket update error:", err.message);
+    console.error("Socket connect error:", err);
   }
 
-  // --- TYPING EVENTS ---
-  socket.on("typing", async ({ receiverId }) => {
-    try {
-      const receiver = await User.findById(receiverId);
-      if (receiver?.socketId) {
-        io.to(receiver.socketId).emit("typing", { senderId: socket.userId });
-      }
-    } catch (err) {
-      console.error("Typing error:", err.message);
-    }
-  });
-
-  socket.on("stopTyping", async ({ receiverId }) => {
-    try {
-      const receiver = await User.findById(receiverId);
-      if (receiver?.socketId) {
-        io.to(receiver.socketId).emit("stopTyping", {
-          senderId: socket.userId,
-        });
-      }
-    } catch (err) {
-      console.error("StopTyping error:", err.message);
-    }
-  });
-
-  // --- SEND MESSAGE ---
+  // ========== SEND MESSAGE ==========
   socket.on("sendMessage", async ({ receiverPhone, text }) => {
     try {
       const senderId = socket.userId;
@@ -149,27 +107,26 @@ io.on("connection", async (socket) => {
       const payload = {
         _id: message._id.toString(),
         senderId,
-        receiverId: receiver._id.toString(),
+        receiverId: receiver._id,
         text,
         createdAt: message.createdAt,
         delivered: message.delivered,
         seen: message.seen,
       };
 
+      // Deliver to receiver
       if (receiver.socketId) {
         io.to(receiver.socketId).emit("receiveMessage", payload);
-        io.to(socket.id).emit("messageDelivered", {
-          messageId: payload._id,
-        });
       }
 
+      // Return to sender
       io.to(socket.id).emit("receiveMessage", payload);
     } catch (err) {
-      console.error("Send message error:", err.message);
+      console.error("Send message error:", err);
     }
   });
 
-  // --- DELETE MESSAGE ---
+  // ========== DELETE MESSAGE ==========
   socket.on("deleteMessage", async ({ messageId, receiverId }) => {
     try {
       await Message.findByIdAndDelete(messageId);
@@ -183,11 +140,11 @@ io.on("connection", async (socket) => {
 
       io.to(socket.id).emit("messageDeleted", messageId);
     } catch (err) {
-      console.error("Delete message error:", err.message);
+      console.error("Delete error:", err);
     }
   });
 
-  // --- MARK SEEN ---
+  // ========== MARK SEEN ==========
   socket.on("markSeen", async ({ userId: currentUserId, otherUserId }) => {
     try {
       const unseen = await Message.find({
@@ -199,32 +156,29 @@ io.on("connection", async (socket) => {
       if (unseen.length === 0) return;
 
       const ids = unseen.map((m) => m._id.toString());
-      await Message.updateMany(
-        { _id: { $in: ids } },
-        { $set: { seen: true } }
-      );
+      await Message.updateMany({ _id: { $in: ids } }, { $set: { seen: true } });
 
       const other = await User.findById(otherUserId);
       if (other?.socketId) {
         io.to(other.socketId).emit("messageSeen", { messageIds: ids });
       }
     } catch (err) {
-      console.error("Mark seen error:", err.message);
+      console.error("Mark seen error:", err);
     }
   });
 
-  // --- DISCONNECT ---
+  // ========== DISCONNECT ==========
   socket.on("disconnect", async () => {
     try {
       await User.findByIdAndUpdate(socket.userId, { socketId: "" });
       console.log(`🔴 User ${socket.userId} disconnected`);
     } catch (err) {
-      console.error("Disconnect error:", err.message);
+      console.error("Disconnect error:", err);
     }
   });
 });
 
-// --- API ENDPOINT: MARK SEEN ---
+// ===== REST API: MARK SEEN =====
 app.post("/api/messages/mark-seen", async (req, res) => {
   const { userId, otherId } = req.body;
 
@@ -235,27 +189,18 @@ app.post("/api/messages/mark-seen", async (req, res) => {
       seen: false,
     });
 
-    if (unseen.length > 0) {
-      const ids = unseen.map((m) => m._id.toString());
+    if (unseen.length === 0) return res.json({ success: true });
 
-      await Message.updateMany(
-        { _id: { $in: ids } },
-        { $set: { seen: true } }
-      );
-
-      const other = await User.findById(otherId);
-      if (other?.socketId) {
-        io.to(other.socketId).emit("messageSeen", { messageIds: ids });
-      }
-    }
+    const ids = unseen.map((m) => m._id.toString());
+    await Message.updateMany({ _id: { $in: ids } }, { $set: { seen: true } });
 
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ message: "Server error" });
+    res.json({ success: false });
   }
 });
 
-// --- FETCH MESSAGES ---
+// ===== REST API: GET MESSAGES =====
 app.get("/api/messages/:otherUserId", async (req, res) => {
   const currentUserId = req.query.currentUserId;
   const otherUserId = req.params.otherUserId;
@@ -264,7 +209,7 @@ app.get("/api/messages/:otherUserId", async (req, res) => {
     !mongoose.Types.ObjectId.isValid(currentUserId) ||
     !mongoose.Types.ObjectId.isValid(otherUserId)
   ) {
-    return res.status(400).json({ message: "Invalid user IDs" });
+    return res.json([]); // ALWAYS array
   }
 
   try {
@@ -277,13 +222,17 @@ app.get("/api/messages/:otherUserId", async (req, res) => {
 
     res.json(messages);
   } catch (err) {
-    res.status(500).json({ message: "Server error" });
+    res.json([]); // prevents frontend crash
   }
 });
 
-// --- FETCH CHATS ---
+// ===== REST API: CHAT LIST =====
 app.get("/api/chats/:userId", async (req, res) => {
   const userId = req.params.userId;
+
+  if (!mongoose.Types.ObjectId.isValid(userId)) {
+    return res.json([]); // prevent crash
+  }
 
   try {
     const messages = await Message.find({
@@ -298,17 +247,16 @@ app.get("/api/chats/:userId", async (req, res) => {
       ),
     ];
 
-    const users = await User.find({ _id: { $in: partnerIds } }).select(
-      "name phone socketId"
-    );
+    const users = await User.find({ _id: { $in: partnerIds } })
+      .select("name phone socketId");
 
-    res.json(users);
+    res.json(users); // ALWAYS array
   } catch (err) {
-    res.status(500).json({ message: "Server error" });
+    res.json([]); // FIX: Prevent .map crash
   }
 });
 
-// --- START SERVER ---
+// ===== START SERVER =====
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, "0.0.0.0", () =>
   console.log(`🚀 Server running on port ${PORT}`)
