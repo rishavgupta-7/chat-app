@@ -23,8 +23,7 @@ const __dirname = path.dirname(__filename);
 
 // ---- CORS ORIGINS ----
 const allowedOrigins = [
-  "http://localhost:3000",
-  process.env.CLIENT_URL // ⭐ your Render frontend URL
+  process.env.CLIENT_URL || "*", // ⭐ NO localhost, dynamic for Render
 ];
 
 // --- EXPRESS APP ---
@@ -47,7 +46,7 @@ app.get("/api", (req, res) => res.send("API running ✔"));
 const frontendPath = path.join(__dirname, "../frontend/build");
 app.use(express.static(frontendPath));
 
-// ⭐ FIX: Use "/*" instead of "*" (Express v5 compatibility)
+// ⭐ FIX for Express v5 — regex catch-all
 app.get(/.*/, (req, res) => {
   res.sendFile(path.join(frontendPath, "index.html"));
 });
@@ -59,7 +58,6 @@ const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
     origin: allowedOrigins,
-    methods: ["GET", "POST"],
     credentials: true,
   },
   transports: ["websocket", "polling"],
@@ -70,7 +68,6 @@ io.use(async (socket, next) => {
   try {
     const token = socket.handshake.auth.token;
     if (!token) return next(new Error("No token provided"));
-
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     socket.userId = decoded.id;
     next();

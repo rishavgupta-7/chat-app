@@ -1,4 +1,3 @@
-// ChatApp.jsx
 import { useEffect, useState, useRef } from "react";
 import { io } from "socket.io-client";
 import axios from "axios";
@@ -6,9 +5,8 @@ import { useNavigate } from "react-router-dom";
 import "./Chat.css";
 
 export default function ChatApp({ user, setUser }) {
-  // ✅ backend URL for both localhost + render
-  const BACKEND_URL =
-    process.env.REACT_APP_BACKEND_URL || "http://localhost:5000";
+  // 🔥 Remove localhost — use relative requests for both Local & Render
+  const BACKEND_URL = "";
 
   const [socket, setSocket] = useState(null);
   const [chatList, setChatList] = useState([]);
@@ -26,16 +24,16 @@ export default function ChatApp({ user, setUser }) {
   const typingTimeout = useRef(null);
   const navigate = useNavigate();
 
-  // Detect mobile on mount
+  // Detect mobile
   useEffect(() => {
     const isMobile = window.innerWidth <= 768;
     setShowLeftPanel(true);
     setShowRightPanel(!isMobile);
   }, []);
 
-  // Socket.io connection (Render + Localhost)
+  // ⭐ Socket.io connection (relative URL makes it auto-work)
   useEffect(() => {
-    const s = io(BACKEND_URL, {
+    const s = io("/", {
       transports: ["websocket", "polling"],
       auth: { token: localStorage.getItem("token") },
     });
@@ -73,44 +71,42 @@ export default function ChatApp({ user, setUser }) {
     });
 
     return () => s.disconnect();
-  }, [selectedUser, BACKEND_URL]);
+  }, [selectedUser]);
 
-  // Fetch chat list
+  // ⭐ Fetch chat list
   useEffect(() => {
     const fetchChats = async () => {
       try {
-        const res = await axios.get(`${BACKEND_URL}/api/chats/${user.id}`);
+        const res = await axios.get(`/api/chats/${user.id}`);
         setChatList(res.data);
       } catch (err) {
         console.error("Fetch chat list error:", err);
       }
     };
     fetchChats();
-  }, [user.id, BACKEND_URL]);
+  }, [user.id]);
 
   // Scroll to bottom
   const scrollToBottom = () =>
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   useEffect(scrollToBottom, [messages]);
 
-  // Start chat
+  // ⭐ Start chat
   const startChat = async (phone) => {
     const targetPhone = (phone || searchPhone).trim();
     if (!targetPhone) return alert("Enter phone number");
 
     try {
-      const res = await axios.get(
-        `${BACKEND_URL}/api/auth/findByPhone/${targetPhone}`
-      );
-
+      const res = await axios.get(`/api/auth/findByPhone/${targetPhone}`);
       const u = res.data;
+
       setSelectedUser(u);
 
       if (!chatList.find((c) => c._id === u._id))
         setChatList((prev) => [u, ...prev]);
 
       const msgs = await axios.get(
-        `${BACKEND_URL}/api/messages/${u._id}?currentUserId=${user.id}`
+        `/api/messages/${u._id}?currentUserId=${user.id}`
       );
 
       setMessages(msgs.data);
@@ -157,7 +153,7 @@ export default function ChatApp({ user, setUser }) {
     }, 1000);
   };
 
-  // Send message
+  // ⭐ Send message
   const sendMessage = () => {
     if (!text || !selectedUser || !socket) return;
 
@@ -196,7 +192,7 @@ export default function ChatApp({ user, setUser }) {
     navigate("/login");
   };
 
-  // Back button (mobile)
+  // Back (mobile)
   const goBack = () => {
     setShowLeftPanel(true);
     setShowRightPanel(false);
@@ -257,7 +253,6 @@ export default function ChatApp({ user, setUser }) {
               onMouseLeave={handlePressEnd}
               onTouchStart={() => handlePressStart(m._id, m.receiverId)}
               onTouchEnd={handlePressEnd}
-              onTouchCancel={handlePressEnd}
             >
               <span
                 className={`message-bubble ${

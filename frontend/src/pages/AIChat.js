@@ -11,9 +11,10 @@ const personas = [
   { id: "romantic", name: "Romantic AI", description: "Loving & sweet" },
 ];
 
-// DYNAMIC BACKEND URL
-const BACKEND_URL =
-  process.env.REACT_APP_BACKEND_URL || "http://localhost:5000";
+// ❌ REMOVE LOCALHOST
+// const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "http://localhost:5000";
+// ✅ USE RELATIVE API BASE PATH INSTEAD
+const BACKEND_URL = "";
 
 // -------------------------
 // LOCALSTORAGE FUNCTIONS
@@ -33,14 +34,14 @@ export default function AIChat({ user, setUser }) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef(null);
-  const [isMenuOpen, setIsMenuOpen] = useState(false); // Mobile menu
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   // AUTO SCROLL
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // LOAD SAVED CHAT WHEN PERSONA CHANGES
+  // LOAD PREVIOUS CHAT
   useEffect(() => {
     if (selectedPersona) {
       const oldChat = loadChat(selectedPersona);
@@ -48,9 +49,9 @@ export default function AIChat({ user, setUser }) {
     }
   }, [selectedPersona]);
 
-  // ---------------------------------
-  // SEND MESSAGE
-  // ---------------------------------
+  // -----------------------------
+  // SEND MESSAGE TO BACKEND
+  // -----------------------------
   const sendMessage = async () => {
     if (!input.trim() || !selectedPersona) return;
 
@@ -73,7 +74,8 @@ export default function AIChat({ user, setUser }) {
         content: msg.text,
       }));
 
-      const res = await axios.post(`${BACKEND_URL}/api/ai/chat`, {
+      // ⭐ FIX: NO LOCALHOST
+      const res = await axios.post(`/api/ai/chat`, {
         messages: formatted,
         persona: selectedPersona,
       });
@@ -103,15 +105,11 @@ export default function AIChat({ user, setUser }) {
     setLoading(false);
   };
 
-  // TIME FORMATTER
   const formatTime = (date) => {
     const d = new Date(date);
     return `${d.getHours()}:${d.getMinutes().toString().padStart(2, "0")}`;
   };
 
-  // ---------------------------------
-  // UI
-  // ---------------------------------
   return (
     <div className="ai-chat-container">
       {/* LEFT PANEL */}
@@ -131,7 +129,7 @@ export default function AIChat({ user, setUser }) {
         ))}
       </div>
 
-      {/* MOBILE PERSONA MENU */}
+      {/* MOBILE MENU */}
       <div className="mobile-persona-btn-wrapper">
         <button
           className="mobile-persona-btn"
