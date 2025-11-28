@@ -51,7 +51,7 @@ app.use(express.static(frontendPath));
 // ✅ CORRECT EXPRESS v5 CATCH-ALL ROUTE
 // (This one line was breaking everything before)
 // =====================================================
-app.get("/*", (req, res) => {
+app.get("*", (req, res) => {
   res.sendFile(path.join(frontendPath, "index.html"));
 });
 
