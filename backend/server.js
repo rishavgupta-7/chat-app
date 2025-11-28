@@ -5,8 +5,8 @@ import dotenv from "dotenv";
 import cors from "cors";
 import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
-import path from "path";                  // ⭐ UPDATED
-import { fileURLToPath } from "url";      // ⭐ UPDATED
+import path from "path";
+import { fileURLToPath } from "url";
 
 import connectDB from "./config/db.js";
 import authRoutes from "./routes/authRoutes.js";
@@ -43,12 +43,12 @@ app.use("/api/ai", aiRoutes);
 
 app.get("/api", (req, res) => res.send("API running ✔"));
 
-// ⭐⭐⭐ FRONTEND BUILD SERVING (CRUCIAL FOR RENDER) ⭐⭐⭐
+// ⭐⭐⭐ SERVE FRONTEND BUILD (IMPORTANT) ⭐⭐⭐
 const frontendPath = path.join(__dirname, "../frontend/build");
 app.use(express.static(frontendPath));
 
-// ⭐ Catch-all route: send React index.html
-app.get("*", (req, res) => {
+// ⭐ FIX: Use "/*" instead of "*" (Express v5 compatibility)
+app.get("/*", (req, res) => {
   res.sendFile(path.join(frontendPath, "index.html"));
 });
 
@@ -190,7 +190,7 @@ io.on("connection", async (socket) => {
     }
   });
 
-  // --- MARK SEEN (socket) ---
+  // --- MARK SEEN ---
   socket.on("markSeen", async ({ userId: currentUserId, otherUserId }) => {
     try {
       const unseen = await Message.find({
@@ -216,6 +216,7 @@ io.on("connection", async (socket) => {
     }
   });
 
+  // --- DISCONNECT ---
   socket.on("disconnect", async () => {
     try {
       await User.findByIdAndUpdate(socket.userId, { socketId: "" });
