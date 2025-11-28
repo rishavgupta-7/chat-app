@@ -48,7 +48,7 @@ const frontendPath = path.join(__dirname, "../frontend/build");
 app.use(express.static(frontendPath));
 
 // ⭐ FIX: Use "/*" instead of "*" (Express v5 compatibility)
-app.get("/*", (req, res) => {
+app.get(/.*/, (req, res) => {
   res.sendFile(path.join(frontendPath, "index.html"));
 });
 
