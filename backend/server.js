@@ -17,13 +17,13 @@ import aiRoutes from "./routes/aiRoutes.js";
 dotenv.config();
 connectDB();
 
-// ===== REQUIRED FOR SERVING FRONTEND BUILD =====
+// ===== SERVE FRONTEND BUILD =====
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // ===== CORS =====
 const allowedOrigins = [
-  process.env.CLIENT_URL || "*", // Render frontend URL
+  process.env.CLIENT_URL || "*",
 ];
 
 // ===== EXPRESS APP =====
@@ -43,14 +43,18 @@ app.use("/api/ai", aiRoutes);
 
 app.get("/api", (req, res) => res.send("API running ✔"));
 
-// ===== SERVE FRONTEND BUILD =====
 const frontendPath = path.join(__dirname, "../frontend/build");
 app.use(express.static(frontendPath));
 
-// EXPRESS v5 wildcard FIX (must use regex)
-app.get(/.*/, (req, res) => {
+
+// =====================================================
+// ✅ CORRECT EXPRESS v5 CATCH-ALL ROUTE
+// (This one line was breaking everything before)
+// =====================================================
+app.get("/*", (req, res) => {
   res.sendFile(path.join(frontendPath, "index.html"));
 });
+
 
 // ===== HTTP SERVER =====
 const server = http.createServer(app);
@@ -89,7 +93,7 @@ io.on("connection", async (socket) => {
     console.error("Socket connect error:", err);
   }
 
-  // ========== SEND MESSAGE ==========
+  // SEND MESSAGE
   socket.on("sendMessage", async ({ receiverPhone, text }) => {
     try {
       const senderId = socket.userId;
@@ -114,19 +118,17 @@ io.on("connection", async (socket) => {
         seen: message.seen,
       };
 
-      // Deliver to receiver
       if (receiver.socketId) {
         io.to(receiver.socketId).emit("receiveMessage", payload);
       }
 
-      // Return to sender
       io.to(socket.id).emit("receiveMessage", payload);
     } catch (err) {
       console.error("Send message error:", err);
     }
   });
 
-  // ========== DELETE MESSAGE ==========
+  // DELETE MESSAGE
   socket.on("deleteMessage", async ({ messageId, receiverId }) => {
     try {
       await Message.findByIdAndDelete(messageId);
@@ -144,7 +146,7 @@ io.on("connection", async (socket) => {
     }
   });
 
-  // ========== MARK SEEN ==========
+  // MARK SEEN
   socket.on("markSeen", async ({ userId: currentUserId, otherUserId }) => {
     try {
       const unseen = await Message.find({
@@ -167,7 +169,7 @@ io.on("connection", async (socket) => {
     }
   });
 
-  // ========== DISCONNECT ==========
+  // DISCONNECT
   socket.on("disconnect", async () => {
     try {
       await User.findByIdAndUpdate(socket.userId, { socketId: "" });
@@ -209,7 +211,7 @@ app.get("/api/messages/:otherUserId", async (req, res) => {
     !mongoose.Types.ObjectId.isValid(currentUserId) ||
     !mongoose.Types.ObjectId.isValid(otherUserId)
   ) {
-    return res.json([]); // ALWAYS array
+    return res.json([]); 
   }
 
   try {
@@ -222,7 +224,7 @@ app.get("/api/messages/:otherUserId", async (req, res) => {
 
     res.json(messages);
   } catch (err) {
-    res.json([]); // prevents frontend crash
+    res.json([]);
   }
 });
 
@@ -231,7 +233,7 @@ app.get("/api/chats/:userId", async (req, res) => {
   const userId = req.params.userId;
 
   if (!mongoose.Types.ObjectId.isValid(userId)) {
-    return res.json([]); // prevent crash
+    return res.json([]);
   }
 
   try {
@@ -250,9 +252,9 @@ app.get("/api/chats/:userId", async (req, res) => {
     const users = await User.find({ _id: { $in: partnerIds } })
       .select("name phone socketId");
 
-    res.json(users); // ALWAYS array
+    res.json(users);
   } catch (err) {
-    res.json([]); // FIX: Prevent .map crash
+    res.json([]);
   }
 });
 
