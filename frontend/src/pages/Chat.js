@@ -5,8 +5,11 @@ import { useNavigate } from "react-router-dom";
 import "./Chat.css";
 
 export default function ChatApp({ user, setUser }) {
-  // 🔥 Remove localhost — use relative requests for both Local & Render
+  // Use relative URL
   const BACKEND_URL = "";
+
+  // Ensure user.id always exists
+  const safeUser = user && user._id && !user.id ? { ...user, id: user._id } : user;
 
   const [socket, setSocket] = useState(null);
   const [chatList, setChatList] = useState([]);
@@ -31,7 +34,9 @@ export default function ChatApp({ user, setUser }) {
     setShowRightPanel(!isMobile);
   }, []);
 
-  // ⭐ Socket.io connection (relative URL makes it auto-work)
+  // ===========================
+  // SOCKET.IO CONNECTION
+  // ===========================
   useEffect(() => {
     const s = io("/", {
       transports: ["websocket", "polling"],
@@ -73,25 +78,36 @@ export default function ChatApp({ user, setUser }) {
     return () => s.disconnect();
   }, [selectedUser]);
 
-  // ⭐ Fetch chat list
+  // ===========================
+  // FETCH CHAT LIST
+  // ===========================
   useEffect(() => {
+    if (!safeUser?.id) return;
+
     const fetchChats = async () => {
       try {
-        const res = await axios.get(`/api/chats/${user.id}`);
-        setChatList(res.data);
+        const res = await axios.get(`/api/chats/${safeUser.id}`);
+
+        // Ensure array
+        setChatList(Array.isArray(res.data) ? res.data : []);
       } catch (err) {
         console.error("Fetch chat list error:", err);
+        setChatList([]); // Prevent map crash
       }
     };
+
     fetchChats();
-  }, [user.id]);
+  }, [safeUser?.id]);
 
   // Scroll to bottom
   const scrollToBottom = () =>
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+
   useEffect(scrollToBottom, [messages]);
 
-  // ⭐ Start chat
+  // ===========================
+  // START CHAT
+  // ===========================
   const startChat = async (phone) => {
     const targetPhone = (phone || searchPhone).trim();
     if (!targetPhone) return alert("Enter phone number");
@@ -106,10 +122,10 @@ export default function ChatApp({ user, setUser }) {
         setChatList((prev) => [u, ...prev]);
 
       const msgs = await axios.get(
-        `/api/messages/${u._id}?currentUserId=${user.id}`
+        `/api/messages/${u._id}?currentUserId=${safeUser.id}`
       );
 
-      setMessages(msgs.data);
+      setMessages(Array.isArray(msgs.data) ? msgs.data : []);
       setSearchPhone("");
 
       if (window.innerWidth <= 768) {
@@ -118,7 +134,7 @@ export default function ChatApp({ user, setUser }) {
       }
 
       socket.emit("markSeen", {
-        userId: user.id,
+        userId: safeUser.id,
         otherUserId: u._id,
       });
     } catch {
@@ -126,7 +142,9 @@ export default function ChatApp({ user, setUser }) {
     }
   };
 
-  // Typing indicator
+  // ===========================
+  // TYPING
+  // ===========================
   useEffect(() => {
     if (!socket) return;
 
@@ -142,32 +160,39 @@ export default function ChatApp({ user, setUser }) {
   const handleTyping = () => {
     if (!socket || !selectedUser) return;
 
-    socket.emit("typing", { senderId: user.id, receiverId: selectedUser._id });
+    socket.emit("typing", {
+      senderId: safeUser.id,
+      receiverId: selectedUser._id,
+    });
 
     clearTimeout(typingTimeout.current);
     typingTimeout.current = setTimeout(() => {
       socket.emit("stopTyping", {
-        senderId: user.id,
+        senderId: safeUser.id,
         receiverId: selectedUser._id,
       });
     }, 1000);
   };
 
-  // ⭐ Send message
+  // ===========================
+  // SEND MESSAGE
+  // ===========================
   const sendMessage = () => {
     if (!text || !selectedUser || !socket) return;
 
     socket.emit("sendMessage", {
       receiverPhone: selectedUser.phone,
       text,
-      senderId: user.id,
+      senderId: safeUser.id,
     });
 
     setText("");
     setTypingUser(null);
   };
 
-  // Delete message
+  // ===========================
+  // DELETE MESSAGE
+  // ===========================
   const handlePressStart = (messageId, receiverId) => {
     pressTimer.current = setTimeout(() => {
       if (window.confirm("Delete this message?"))
@@ -184,7 +209,9 @@ export default function ChatApp({ user, setUser }) {
     setMessages((prev) => prev.filter((m) => m._id !== messageId));
   };
 
-  // Logout
+  // ===========================
+  // LOGOUT
+  // ===========================
   const logout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
@@ -192,12 +219,15 @@ export default function ChatApp({ user, setUser }) {
     navigate("/login");
   };
 
-  // Back (mobile)
+  // Mobile back button
   const goBack = () => {
     setShowLeftPanel(true);
     setShowRightPanel(false);
   };
 
+  // ===========================
+  // UI
+  // ===========================
   return (
     <div className="chat-container">
       {/* LEFT PANEL */}
@@ -216,20 +246,21 @@ export default function ChatApp({ user, setUser }) {
         </div>
 
         <div className="chat-list">
-          {chatList.map((c) => (
-            <div
-              key={c._id}
-              className={`chat-item ${
-                selectedUser?._id === c._id ? "active" : ""
-              }`}
-              onClick={() => startChat(c.phone)}
-            >
-              <span
-                className={`status-dot ${c.socketId ? "online" : "offline"}`}
-              ></span>
-              <span>{c.name}</span>
-            </div>
-          ))}
+          {Array.isArray(chatList) &&
+            chatList.map((c) => (
+              <div
+                key={c._id}
+                className={`chat-item ${
+                  selectedUser?._id === c._id ? "active" : ""
+                }`}
+                onClick={() => startChat(c.phone)}
+              >
+                <span
+                  className={`status-dot ${c.socketId ? "online" : "offline"}`}
+                ></span>
+                <span>{c.name}</span>
+              </div>
+            ))}
         </div>
       </div>
 
@@ -242,34 +273,37 @@ export default function ChatApp({ user, setUser }) {
         )}
 
         <div className="messages-area">
-          {messages.map((m) => (
-            <div
-              key={m._id}
-              className={`message-row ${
-                m.senderId === user.id ? "sent" : "received"
-              }`}
-              onMouseDown={() => handlePressStart(m._id, m.receiverId)}
-              onMouseUp={handlePressEnd}
-              onMouseLeave={handlePressEnd}
-              onTouchStart={() => handlePressStart(m._id, m.receiverId)}
-              onTouchEnd={handlePressEnd}
-            >
-              <span
-                className={`message-bubble ${
-                  m.senderId === user.id ? "sent-bubble" : "received-bubble"
+          {Array.isArray(messages) &&
+            messages.map((m) => (
+              <div
+                key={m._id}
+                className={`message-row ${
+                  m.senderId === safeUser.id ? "sent" : "received"
                 }`}
+                onMouseDown={() => handlePressStart(m._id, m.receiverId)}
+                onMouseUp={handlePressEnd}
+                onTouchStart={() => handlePressStart(m._id, m.receiverId)}
+                onTouchEnd={handlePressEnd}
               >
-                {m.text}
-                {m.senderId === user.id && (
-                  <div className="tick">
-                    {!m.delivered && !m.seen && <span>✔</span>}
-                    {m.delivered && !m.seen && <span>✔✔</span>}
-                    {m.seen && <span className="seen">✔✔</span>}
-                  </div>
-                )}
-              </span>
-            </div>
-          ))}
+                <span
+                  className={`message-bubble ${
+                    m.senderId === safeUser.id
+                      ? "sent-bubble"
+                      : "received-bubble"
+                  }`}
+                >
+                  {m.text}
+
+                  {m.senderId === safeUser.id && (
+                    <div className="tick">
+                      {!m.delivered && !m.seen && <span>✔</span>}
+                      {m.delivered && !m.seen && <span>✔✔</span>}
+                      {m.seen && <span className="seen">✔✔</span>}
+                    </div>
+                  )}
+                </span>
+              </div>
+            ))}
 
           {typingUser === selectedUser?._id && (
             <div className="typing-indicator">
