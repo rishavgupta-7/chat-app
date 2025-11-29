@@ -5,41 +5,21 @@ import { useNavigate } from "react-router-dom";
 import "./Chat.css";
 
 export default function ChatApp({ user, setUser }) {
-
-  // ========================
-  // FIX USER.id ALWAYS EXISTS
-  // ========================
-  const safeUser =
-    user && user._id && !user.id ? { ...user, id: user._id } : user;
+  // Always ensure user.id exists
+  const safeUser = user && user._id ? { ...user, id: user._id } : null;
 
   const [socket, setSocket] = useState(null);
 
-  // ========================
-  // RESTORE SELECTED USER
-  // ========================
   const [selectedUser, setSelectedUser] = useState(() => {
     try {
-      const saved = JSON.parse(localStorage.getItem("selectedUser"));
-      return saved || null;
+      return JSON.parse(localStorage.getItem("selectedUser")) || null;
     } catch {
       return null;
     }
   });
 
   const [chatList, setChatList] = useState([]);
-
-  // ========================
-  // RESTORE CACHED MESSAGES
-  // ========================
-  const [messages, setMessages] = useState(() => {
-    try {
-      if (!selectedUser) return [];
-      const saved = JSON.parse(localStorage.getItem(`chat_${selectedUser._id}`));
-      return Array.isArray(saved) ? saved : [];
-    } catch {
-      return [];
-    }
-  });
+  const [messages, setMessages] = useState([]);
 
   const [searchPhone, setSearchPhone] = useState("");
   const [text, setText] = useState("");
@@ -53,36 +33,37 @@ export default function ChatApp({ user, setUser }) {
   const [showLeftPanel, setShowLeftPanel] = useState(true);
   const [showRightPanel, setShowRightPanel] = useState(true);
 
-  // ========================
-  // DETECT MOBILE
-  // ========================
+  // Detect mobile
   useEffect(() => {
     const isMobile = window.innerWidth <= 768;
     setShowRightPanel(!isMobile);
   }, []);
 
-  // ========================
-  // SAVE SELECTED USER
-  // ========================
+  // Save selected user
   useEffect(() => {
     if (selectedUser)
       localStorage.setItem("selectedUser", JSON.stringify(selectedUser));
   }, [selectedUser]);
 
-  // ========================
-  // SAVE MESSAGES
-  // ========================
+  // Restore message list when user restored
   useEffect(() => {
-    if (selectedUser)
-      localStorage.setItem(
-        `chat_${selectedUser._id}`,
-        JSON.stringify(messages)
-      );
+    if (!selectedUser) return;
+
+    const cached = JSON.parse(localStorage.getItem(`chat_${selectedUser._id}`));
+    if (Array.isArray(cached)) setMessages(cached);
+
+    setShowLeftPanel(true);
+    setShowRightPanel(true);
+
+  }, [selectedUser]);
+
+  // Save messages
+  useEffect(() => {
+    if (!selectedUser) return;
+    localStorage.setItem(`chat_${selectedUser._id}`, JSON.stringify(messages));
   }, [messages, selectedUser]);
 
-  // ========================
   // SOCKET CONNECTION
-  // ========================
   useEffect(() => {
     const s = io("/", {
       transports: ["websocket", "polling"],
@@ -124,19 +105,14 @@ export default function ChatApp({ user, setUser }) {
     return () => s.disconnect();
   }, [selectedUser]);
 
-  // ========================
-  // FETCH CHAT LIST (SAFE)
-  // ========================
+  // FETCH CHAT LIST
   useEffect(() => {
     if (!safeUser?.id) return;
 
     const fetchChats = async () => {
       try {
         const res = await axios.get(`/api/chats/${safeUser.id}`);
-        const data = res.data;
-
-        if (Array.isArray(data)) setChatList(data);
-        else if (Array.isArray(data?.chats)) setChatList(data.chats);
+        setChatList(Array.isArray(res.data) ? res.data : []);
       } catch (err) {
         console.log("Chat list fetch failed:", err);
       }
@@ -145,12 +121,9 @@ export default function ChatApp({ user, setUser }) {
     fetchChats();
   }, [safeUser?.id]);
 
-  // ========================
-  // LOAD MESSAGES AFTER REFRESH (SAFE)
-  // ========================
+  // LOAD MESSAGES AFTER REFRESH
   useEffect(() => {
-    if (!selectedUser) return;
-    if (!safeUser?.id) return;
+    if (!selectedUser || !safeUser?.id) return;
 
     const loadMessages = async () => {
       try {
@@ -158,28 +131,21 @@ export default function ChatApp({ user, setUser }) {
           `/api/messages/${selectedUser._id}?currentUserId=${safeUser.id}`
         );
 
-        const data = res.data;
-
-        if (Array.isArray(data)) setMessages(data);
-        else if (Array.isArray(data?.messages)) setMessages(data.messages);
+        if (Array.isArray(res.data)) setMessages(res.data);
       } catch (err) {
-        console.log("Messages refresh failed:", err);
+        console.log("Messages load failed:", err);
       }
     };
 
     loadMessages();
-  }, [selectedUser, safeUser?.id]);
+  }, [selectedUser]);
 
-  // ========================
-  // SCROLL BOTTOM
-  // ========================
+  // Scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // ========================
   // START CHAT
-  // ========================
   const startChat = async (phone) => {
     const target = (phone || searchPhone).trim();
     if (!target) return alert("Enter phone number");
@@ -197,8 +163,7 @@ export default function ChatApp({ user, setUser }) {
         `/api/messages/${u._id}?currentUserId=${safeUser.id}`
       );
 
-      const data = msgRes.data;
-      setMessages(Array.isArray(data) ? data : data.messages || []);
+      setMessages(Array.isArray(msgRes.data) ? msgRes.data : []);
 
       setSearchPhone("");
 
@@ -211,9 +176,7 @@ export default function ChatApp({ user, setUser }) {
     }
   };
 
-  // ========================
-  // TYPING INDICATOR
-  // ========================
+  // Typing indicator
   useEffect(() => {
     if (!socket) return;
 
@@ -243,9 +206,7 @@ export default function ChatApp({ user, setUser }) {
     }, 1000);
   };
 
-  // ========================
   // SEND MESSAGE
-  // ========================
   const sendMessage = () => {
     if (!text || !selectedUser || !socket) return;
 
@@ -259,9 +220,7 @@ export default function ChatApp({ user, setUser }) {
     setTypingUser(null);
   };
 
-  // ========================
   // DELETE MESSAGE
-  // ========================
   const handlePressStart = (id, receiverId) => {
     pressTimer.current = setTimeout(() => {
       if (window.confirm("Delete this message?"))
@@ -278,9 +237,7 @@ export default function ChatApp({ user, setUser }) {
     setMessages((prev) => prev.filter((m) => m._id !== id));
   };
 
-  // ========================
   // LOGOUT
-  // ========================
   const logout = () => {
     localStorage.clear();
     setUser(null);
@@ -292,9 +249,6 @@ export default function ChatApp({ user, setUser }) {
     setShowRightPanel(false);
   };
 
-  // ========================
-  // UI
-  // ========================
   return (
     <div className="chat-container">
       
@@ -313,66 +267,48 @@ export default function ChatApp({ user, setUser }) {
         </div>
 
         <div className="chat-list">
-          {Array.isArray(chatList) &&
-            chatList.map((c) => (
-              <div
-                key={c._id}
-                className={`chat-item ${
-                  selectedUser?._id === c._id ? "active" : ""
-                }`}
-                onClick={() => startChat(c.phone)}
-              >
-                <span
-                  className={`status-dot ${
-                    c.socketId ? "online" : "offline"
-                  }`}
-                ></span>
-                <span>{c.name}</span>
-              </div>
-            ))}
+          {chatList.map((c) => (
+            <div
+              key={c._id}
+              className={`chat-item ${selectedUser?._id === c._id ? "active" : ""}`}
+              onClick={() => startChat(c.phone)}
+            >
+              <span className={`status-dot ${c.socketId ? "online" : "offline"}`}></span>
+              <span>{c.name}</span>
+            </div>
+          ))}
         </div>
       </div>
 
       {/* RIGHT PANEL */}
       <div className={`right-panel ${showRightPanel ? "show" : "hide"}`}>
         {window.innerWidth <= 768 && selectedUser && (
-          <button className="back-btn" onClick={goBack}>
-            ← Back
-          </button>
+          <button className="back-btn" onClick={goBack}>← Back</button>
         )}
 
         <div className="messages-area">
-          {Array.isArray(messages) &&
-            messages.map((m) => (
-              <div
-                key={m._id}
-                className={`message-row ${
-                  m.senderId === safeUser.id ? "sent" : "received"
-                }`}
-                onMouseDown={() => handlePressStart(m._id, m.receiverId)}
-                onMouseUp={handlePressEnd}
-                onTouchStart={() => handlePressStart(m._id, m.receiverId)}
-                onTouchEnd={handlePressEnd}
-              >
-                <span
-                  className={`message-bubble ${
-                    m.senderId === safeUser.id
-                      ? "sent-bubble"
-                      : "received-bubble"
-                  }`}
-                >
-                  {m.text}
+          {messages.map((m) => (
+            <div
+              key={m._id}
+              className={`message-row ${m.senderId === safeUser.id ? "sent" : "received"}`}
+              onMouseDown={() => handlePressStart(m._id, m.receiverId)}
+              onMouseUp={handlePressEnd}
+              onTouchStart={() => handlePressStart(m._id, m.receiverId)}
+              onTouchEnd={handlePressEnd}
+            >
+              <span className={`message-bubble ${m.senderId === safeUser.id ? "sent-bubble" : "received-bubble"}`}>
+                {m.text}
 
-                  {m.senderId === safeUser.id && (
-                    <div className="tick">
-                      {!m.delivered && !m.seen && <span>✔</span>}
-                      {m.delivered && !m.seen && <span>✔✔</span>}
-                      {m.seen && <span className="seen">✔✔</span>}
-                    </div>
-                  )}
-                </span>
-              </div>
-            ))}
+                {m.senderId === safeUser.id && (
+                  <div className="tick">
+                    {!m.delivered && !m.seen && <span>✔</span>}
+                    {m.delivered && !m.seen && <span>✔✔</span>}
+                    {m.seen && <span className="seen">✔✔</span>}
+                  </div>
+                )}
+              </span>
+            </div>
+          ))}
 
           {typingUser === selectedUser?._id && (
             <div className="typing-indicator">
@@ -394,9 +330,7 @@ export default function ChatApp({ user, setUser }) {
               placeholder="Type a message..."
               className="text-input"
             />
-            <button className="send-btn" onClick={sendMessage}>
-              Send
-            </button>
+            <button className="send-btn" onClick={sendMessage}>Send</button>
           </div>
         )}
       </div>
