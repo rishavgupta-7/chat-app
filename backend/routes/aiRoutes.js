@@ -1,19 +1,18 @@
 // aiRoutes.js
 import express from "express";
-// ❌ REMOVE THIS → Node 18+ already includes fetch
-// import fetch from "node-fetch";              // 🔥 UPDATED (removed)
 import dotenv from "dotenv";
 dotenv.config();
 
 const router = express.Router();
 
-// Persona prompts
-const personaPrompts = {
-  friendly: "You are a friendly, helpful AI who talks politely.Only give clean, simple,short organized text. Do NOT use markdown tables, pipes (|), code blocks, or complex formatting.",
-  sarcastic: "You are a sarcastic AI with witty replies.Only give clean, simple,short organized text. Do NOT use markdown tables, pipes (|), code blocks, or complex formatting.",
-  coder: "You are a senior software engineer. Answer like a pro coder.Only give clean, simple,short organized text. Do NOT use markdown tables, pipes (|), code blocks, or complex formatting.",
-  romantic: "You are a sweet, loving AI that talks romantically.Only give clean, simple,short organized text. Do NOT use markdown tables, pipes (|), code blocks, or complex formatting."
-};
+// REMOVE node-fetch ❌
+// import fetch from "node-fetch"; // ❌ breaks on Render
+
+// Use native fetch ✔ (Node 18+)
+const fetch = global.fetch;
+
+// Persona prompts...
+const personaPrompts = { ... };
 
 // CHAT ROUTE
 router.post("/chat", async (req, res) => {
@@ -23,7 +22,6 @@ router.post("/chat", async (req, res) => {
     return res.status(400).json({ error: "Messages array is required." });
   }
 
-  // Build final message list
   const finalMessages = [
     {
       role: "system",
@@ -33,17 +31,22 @@ router.post("/chat", async (req, res) => {
   ];
 
   try {
-    // 🔥 UPDATED: using native fetch (NO node-fetch)
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {   // 🔥 UPDATED
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+
+        // ⭐ REQUIRED FOR PRODUCTION / Render
+        "HTTP-Referer": "https://chat-app-hwvk.onrender.com",
+        "X-Title": "ChatApp AI Persona"
       },
       body: JSON.stringify({
         model: "openai/gpt-oss-20b:free",
         messages: finalMessages,
-        reasoning: { enabled: true }
+
+        // ❌ REMOVE reasoning — not supported in free models
+        // reasoning: { enabled: true }
       })
     });
 
@@ -64,13 +67,8 @@ router.post("/chat", async (req, res) => {
     });
 
   } catch (err) {
-    console.error("AI Chat Error:", err.message);
-    
-    // 🔥 UPDATED: better structured error response
-    res.status(500).json({
-      error: "AI request failed",
-      details: err.message
-    });
+    console.error("AI Chat Error:", err);
+    res.status(500).json({ error: "AI request failed", details: err.message });
   }
 });
 
