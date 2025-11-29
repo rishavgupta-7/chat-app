@@ -5,18 +5,26 @@ import { useNavigate } from "react-router-dom";
 import "./Chat.css";
 
 export default function ChatApp({ user, setUser }) {
-  // Use relative URL
-  const BACKEND_URL = "";
 
-  // Ensure user.id always exists
-  const safeUser = user && user._id && !user.id ? { ...user, id: user._id } : user;
+  // ---------------------------
+  // 🔥 ALWAYS SAFE USER ID
+  // ---------------------------
+  const userId = user?.id || user?._id;
 
   const [socket, setSocket] = useState(null);
   const [chatList, setChatList] = useState([]);
+
   const [searchPhone, setSearchPhone] = useState("");
-  const [selectedUser, setSelectedUser] = useState(null);
+
+  const [selectedUser, setSelectedUser] = useState(() => {
+    // 🔥 Restore selected chat on refresh
+    const saved = localStorage.getItem("selectedUser");
+    return saved ? JSON.parse(saved) : null;
+  });
+
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
+
   const messagesEndRef = useRef(null);
   const [typingUser, setTypingUser] = useState(null);
 
@@ -25,18 +33,43 @@ export default function ChatApp({ user, setUser }) {
 
   const pressTimer = useRef(null);
   const typingTimeout = useRef(null);
+
   const navigate = useNavigate();
 
-  // Detect mobile
+  // Detect mobile UI
   useEffect(() => {
     const isMobile = window.innerWidth <= 768;
-    setShowLeftPanel(true);
     setShowRightPanel(!isMobile);
   }, []);
 
-  // ===========================
-  // SOCKET.IO CONNECTION
-  // ===========================
+  // ---------------------------
+  // 🔥 PERSIST SELECTED USER
+  // ---------------------------
+  useEffect(() => {
+    if (selectedUser)
+      localStorage.setItem("selectedUser", JSON.stringify(selectedUser));
+  }, [selectedUser]);
+
+  // ---------------------------
+  // 🔥 Load messages from storage on refresh
+  // ---------------------------
+  useEffect(() => {
+    if (!selectedUser) return;
+    const saved = localStorage.getItem(`chat_${selectedUser._id}`);
+    if (saved) setMessages(JSON.parse(saved));
+  }, [selectedUser]);
+
+  // ---------------------------
+  // 🔥 Auto save messages whenever they change
+  // ---------------------------
+  useEffect(() => {
+    if (!selectedUser) return;
+    localStorage.setItem(`chat_${selectedUser._id}`, JSON.stringify(messages));
+  }, [messages]);
+
+  // ---------------------------
+  // SOCKET CONNECTION
+  // ---------------------------
   useEffect(() => {
     const s = io("/", {
       transports: ["websocket", "polling"],
@@ -78,36 +111,34 @@ export default function ChatApp({ user, setUser }) {
     return () => s.disconnect();
   }, [selectedUser]);
 
-  // ===========================
+  // ---------------------------
   // FETCH CHAT LIST
-  // ===========================
+  // ---------------------------
   useEffect(() => {
-    if (!safeUser?.id) return;
+    if (!userId) return;
 
     const fetchChats = async () => {
       try {
-        const res = await axios.get(`/api/chats/${safeUser.id}`);
-
-        // Ensure array
+        const res = await axios.get(`/api/chats/${userId}`);
         setChatList(Array.isArray(res.data) ? res.data : []);
       } catch (err) {
-        console.error("Fetch chat list error:", err);
-        setChatList([]); // Prevent map crash
+        console.error("Chat list error:", err);
+        setChatList([]);
       }
     };
 
     fetchChats();
-  }, [safeUser?.id]);
+  }, [userId]);
 
-  // Scroll to bottom
+  // Auto scroll
   const scrollToBottom = () =>
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
 
   useEffect(scrollToBottom, [messages]);
 
-  // ===========================
+  // ---------------------------
   // START CHAT
-  // ===========================
+  // ---------------------------
   const startChat = async (phone) => {
     const targetPhone = (phone || searchPhone).trim();
     if (!targetPhone) return alert("Enter phone number");
@@ -122,7 +153,7 @@ export default function ChatApp({ user, setUser }) {
         setChatList((prev) => [u, ...prev]);
 
       const msgs = await axios.get(
-        `/api/messages/${u._id}?currentUserId=${safeUser.id}`
+        `/api/messages/${u._id}?currentUserId=${userId}`
       );
 
       setMessages(Array.isArray(msgs.data) ? msgs.data : []);
@@ -133,18 +164,15 @@ export default function ChatApp({ user, setUser }) {
         setShowRightPanel(true);
       }
 
-      socket.emit("markSeen", {
-        userId: safeUser.id,
-        otherUserId: u._id,
-      });
+      socket.emit("markSeen", { userId, otherUserId: u._id });
     } catch {
       alert("User not found!");
     }
   };
 
-  // ===========================
+  // ---------------------------
   // TYPING
-  // ===========================
+  // ---------------------------
   useEffect(() => {
     if (!socket) return;
 
@@ -161,38 +189,39 @@ export default function ChatApp({ user, setUser }) {
     if (!socket || !selectedUser) return;
 
     socket.emit("typing", {
-      senderId: safeUser.id,
+      senderId: userId,
       receiverId: selectedUser._id,
     });
 
     clearTimeout(typingTimeout.current);
+
     typingTimeout.current = setTimeout(() => {
       socket.emit("stopTyping", {
-        senderId: safeUser.id,
+        senderId: userId,
         receiverId: selectedUser._id,
       });
-    }, 1000);
+    }, 1200);
   };
 
-  // ===========================
+  // ---------------------------
   // SEND MESSAGE
-  // ===========================
+  // ---------------------------
   const sendMessage = () => {
     if (!text || !selectedUser || !socket) return;
 
     socket.emit("sendMessage", {
       receiverPhone: selectedUser.phone,
       text,
-      senderId: safeUser.id,
+      senderId: userId,
     });
 
     setText("");
     setTypingUser(null);
   };
 
-  // ===========================
+  // ---------------------------
   // DELETE MESSAGE
-  // ===========================
+  // ---------------------------
   const handlePressStart = (messageId, receiverId) => {
     pressTimer.current = setTimeout(() => {
       if (window.confirm("Delete this message?"))
@@ -204,30 +233,30 @@ export default function ChatApp({ user, setUser }) {
 
   const deleteMessage = (messageId, receiverId) => {
     if (!socket) return;
-
     socket.emit("deleteMessage", { messageId, receiverId });
     setMessages((prev) => prev.filter((m) => m._id !== messageId));
   };
 
-  // ===========================
+  // ---------------------------
   // LOGOUT
-  // ===========================
+  // ---------------------------
   const logout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
+    localStorage.removeItem("selectedUser");
     setUser(null);
     navigate("/login");
   };
 
-  // Mobile back button
+  // Mobile back
   const goBack = () => {
     setShowLeftPanel(true);
     setShowRightPanel(false);
   };
 
-  // ===========================
+  // ---------------------------
   // UI
-  // ===========================
+  // ---------------------------
   return (
     <div className="chat-container">
       {/* LEFT PANEL */}
@@ -246,21 +275,20 @@ export default function ChatApp({ user, setUser }) {
         </div>
 
         <div className="chat-list">
-          {Array.isArray(chatList) &&
-            chatList.map((c) => (
-              <div
-                key={c._id}
-                className={`chat-item ${
-                  selectedUser?._id === c._id ? "active" : ""
-                }`}
-                onClick={() => startChat(c.phone)}
-              >
-                <span
-                  className={`status-dot ${c.socketId ? "online" : "offline"}`}
-                ></span>
-                <span>{c.name}</span>
-              </div>
-            ))}
+          {chatList.map((c) => (
+            <div
+              key={c._id}
+              className={`chat-item ${
+                selectedUser?._id === c._id ? "active" : ""
+              }`}
+              onClick={() => startChat(c.phone)}
+            >
+              <span
+                className={`status-dot ${c.socketId ? "online" : "offline"}`}
+              ></span>
+              <span>{c.name}</span>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -273,37 +301,34 @@ export default function ChatApp({ user, setUser }) {
         )}
 
         <div className="messages-area">
-          {Array.isArray(messages) &&
-            messages.map((m) => (
-              <div
-                key={m._id}
-                className={`message-row ${
-                  m.senderId === safeUser.id ? "sent" : "received"
+          {messages.map((m) => (
+            <div
+              key={m._id}
+              className={`message-row ${
+                m.senderId === userId ? "sent" : "received"
+              }`}
+              onMouseDown={() => handlePressStart(m._id, m.receiverId)}
+              onMouseUp={handlePressEnd}
+              onTouchStart={() => handlePressStart(m._id, m.receiverId)}
+              onTouchEnd={handlePressEnd}
+            >
+              <span
+                className={`message-bubble ${
+                  m.senderId === userId ? "sent-bubble" : "received-bubble"
                 }`}
-                onMouseDown={() => handlePressStart(m._id, m.receiverId)}
-                onMouseUp={handlePressEnd}
-                onTouchStart={() => handlePressStart(m._id, m.receiverId)}
-                onTouchEnd={handlePressEnd}
               >
-                <span
-                  className={`message-bubble ${
-                    m.senderId === safeUser.id
-                      ? "sent-bubble"
-                      : "received-bubble"
-                  }`}
-                >
-                  {m.text}
+                {m.text}
 
-                  {m.senderId === safeUser.id && (
-                    <div className="tick">
-                      {!m.delivered && !m.seen && <span>✔</span>}
-                      {m.delivered && !m.seen && <span>✔✔</span>}
-                      {m.seen && <span className="seen">✔✔</span>}
-                    </div>
-                  )}
-                </span>
-              </div>
-            ))}
+                {m.senderId === userId && (
+                  <div className="tick">
+                    {!m.delivered && !m.seen && <span>✔</span>}
+                    {m.delivered && !m.seen && <span>✔✔</span>}
+                    {m.seen && <span className="seen">✔✔</span>}
+                  </div>
+                )}
+              </span>
+            </div>
+          ))}
 
           {typingUser === selectedUser?._id && (
             <div className="typing-indicator">
