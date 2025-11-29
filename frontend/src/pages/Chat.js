@@ -5,38 +5,74 @@ import { useNavigate } from "react-router-dom";
 import "./Chat.css";
 
 export default function ChatApp({ user, setUser }) {
-  // Use relative URL
+  // Use relative backend URL (Render + Localhost)
   const BACKEND_URL = "";
 
-  // Ensure user.id always exists
-  const safeUser = user && user._id && !user.id ? { ...user, id: user._id } : user;
+  // Fix user.id always present
+  const safeUser =
+    user && user._id && !user.id ? { ...user, id: user._id } : user;
 
   const [socket, setSocket] = useState(null);
+
+  // Load selected user after refresh
+  const [selectedUser, setSelectedUser] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("selectedUser"));
+      return saved || null;
+    } catch {
+      return null;
+    }
+  });
+
   const [chatList, setChatList] = useState([]);
+
+  // Load cached messages safely
+  const [messages, setMessages] = useState(() => {
+    try {
+      if (!selectedUser) return [];
+      const saved = JSON.parse(localStorage.getItem(`chat_${selectedUser._id}`));
+      return Array.isArray(saved) ? saved : [];
+    } catch {
+      return [];
+    }
+  });
+
   const [searchPhone, setSearchPhone] = useState("");
-  const [selectedUser, setSelectedUser] = useState(null);
-  const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
-  const messagesEndRef = useRef(null);
   const [typingUser, setTypingUser] = useState(null);
 
-  const [showLeftPanel, setShowLeftPanel] = useState(true);
-  const [showRightPanel, setShowRightPanel] = useState(true);
-
-  const pressTimer = useRef(null);
+  const messagesEndRef = useRef(null);
   const typingTimeout = useRef(null);
+  const pressTimer = useRef(null);
   const navigate = useNavigate();
 
   // Detect mobile
+  const [showLeftPanel, setShowLeftPanel] = useState(true);
+  const [showRightPanel, setShowRightPanel] = useState(true);
+
   useEffect(() => {
     const isMobile = window.innerWidth <= 768;
-    setShowLeftPanel(true);
     setShowRightPanel(!isMobile);
   }, []);
 
-  // ===========================
-  // SOCKET.IO CONNECTION
-  // ===========================
+  // Save selected user
+  useEffect(() => {
+    if (selectedUser)
+      localStorage.setItem("selectedUser", JSON.stringify(selectedUser));
+  }, [selectedUser]);
+
+  // Save messages
+  useEffect(() => {
+    if (selectedUser)
+      localStorage.setItem(
+        `chat_${selectedUser._id}`,
+        JSON.stringify(messages)
+      );
+  }, [messages, selectedUser]);
+
+  // ========================
+  // SOCKET CONNECTION
+  // ========================
   useEffect(() => {
     const s = io("/", {
       transports: ["websocket", "polling"],
@@ -55,85 +91,107 @@ export default function ChatApp({ user, setUser }) {
       }
     });
 
-    s.on("messageDeleted", (messageId) => {
-      setMessages((prev) => prev.filter((m) => m._id !== messageId));
-    });
+    s.on("messageDeleted", (id) =>
+      setMessages((prev) => prev.filter((m) => m._id !== id))
+    );
 
-    s.on("messageSeen", ({ messageIds }) => {
+    s.on("messageSeen", ({ messageIds }) =>
       setMessages((prev) =>
         prev.map((m) =>
           messageIds.includes(m._id) ? { ...m, seen: true } : m
         )
-      );
-    });
+      )
+    );
 
-    s.on("messageDelivered", ({ messageId }) => {
+    s.on("messageDelivered", ({ messageId }) =>
       setMessages((prev) =>
         prev.map((m) =>
           m._id === messageId ? { ...m, delivered: true } : m
         )
-      );
-    });
+      )
+    );
 
     return () => s.disconnect();
   }, [selectedUser]);
 
-  // ===========================
+  // ========================
   // FETCH CHAT LIST
-  // ===========================
+  // ========================
   useEffect(() => {
     if (!safeUser?.id) return;
 
     const fetchChats = async () => {
       try {
         const res = await axios.get(`/api/chats/${safeUser.id}`);
+        const data = res.data;
 
-        // Ensure array
-        setChatList(Array.isArray(res.data) ? res.data : []);
-      } catch (err) {
-        console.error("Fetch chat list error:", err);
-        setChatList([]); // Prevent map crash
+        if (Array.isArray(data)) setChatList(data);
+        else if (Array.isArray(data?.chats)) setChatList(data.chats);
+        else setChatList([]);
+      } catch {
+        setChatList([]);
       }
     };
 
     fetchChats();
   }, [safeUser?.id]);
 
-  // Scroll to bottom
-  const scrollToBottom = () =>
+  // ========================
+  // LOAD MESSAGES AFTER REFRESH
+  // ========================
+  useEffect(() => {
+    if (!selectedUser) return;
+
+    const loadMessages = async () => {
+      try {
+        const res = await axios.get(
+          `/api/messages/${selectedUser._id}?currentUserId=${safeUser.id}`
+        );
+
+        const data = res.data;
+        if (Array.isArray(data)) setMessages(data);
+        else if (Array.isArray(data?.messages)) setMessages(data.messages);
+        else setMessages([]);
+      } catch {
+        setMessages([]);
+      }
+    };
+
+    loadMessages();
+  }, [selectedUser]);
+
+  // Scroll bottom
+  useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
-  useEffect(scrollToBottom, [messages]);
-
-  // ===========================
+  // ========================
   // START CHAT
-  // ===========================
+  // ========================
   const startChat = async (phone) => {
-    const targetPhone = (phone || searchPhone).trim();
-    if (!targetPhone) return alert("Enter phone number");
+    const target = (phone || searchPhone).trim();
+    if (!target) return alert("Enter phone number");
 
     try {
-      const res = await axios.get(`/api/auth/findByPhone/${targetPhone}`);
+      const res = await axios.get(`/api/auth/findByPhone/${target}`);
       const u = res.data;
 
       setSelectedUser(u);
 
-      if (!chatList.find((c) => c._id === u._id))
+      if (!chatList.some((c) => c._id === u._id))
         setChatList((prev) => [u, ...prev]);
 
-      const msgs = await axios.get(
+      // Load messages
+      const msgRes = await axios.get(
         `/api/messages/${u._id}?currentUserId=${safeUser.id}`
       );
 
-      setMessages(Array.isArray(msgs.data) ? msgs.data : []);
+      const data = msgRes.data;
+      setMessages(Array.isArray(data) ? data : data.messages || []);
+
       setSearchPhone("");
 
-      if (window.innerWidth <= 768) {
-        setShowLeftPanel(false);
-        setShowRightPanel(true);
-      }
-
-      socket.emit("markSeen", {
+      socket?.emit("markSeen", {
         userId: safeUser.id,
         otherUserId: u._id,
       });
@@ -142,9 +200,9 @@ export default function ChatApp({ user, setUser }) {
     }
   };
 
-  // ===========================
-  // TYPING
-  // ===========================
+  // ========================
+  // TYPING INDICATOR
+  // ========================
   useEffect(() => {
     if (!socket) return;
 
@@ -174,9 +232,9 @@ export default function ChatApp({ user, setUser }) {
     }, 1000);
   };
 
-  // ===========================
+  // ========================
   // SEND MESSAGE
-  // ===========================
+  // ========================
   const sendMessage = () => {
     if (!text || !selectedUser || !socket) return;
 
@@ -190,51 +248,47 @@ export default function ChatApp({ user, setUser }) {
     setTypingUser(null);
   };
 
-  // ===========================
+  // ========================
   // DELETE MESSAGE
-  // ===========================
-  const handlePressStart = (messageId, receiverId) => {
+  // ========================
+  const handlePressStart = (id, receiverId) => {
     pressTimer.current = setTimeout(() => {
       if (window.confirm("Delete this message?"))
-        deleteMessage(messageId, receiverId);
+        deleteMessage(id, receiverId);
     }, 600);
   };
 
   const handlePressEnd = () => clearTimeout(pressTimer.current);
 
-  const deleteMessage = (messageId, receiverId) => {
+  const deleteMessage = (id, receiverId) => {
     if (!socket) return;
-
-    socket.emit("deleteMessage", { messageId, receiverId });
-    setMessages((prev) => prev.filter((m) => m._id !== messageId));
+    socket.emit("deleteMessage", { messageId: id, receiverId });
+    setMessages((prev) => prev.filter((m) => m._id !== id));
   };
 
-  // ===========================
+  // ========================
   // LOGOUT
-  // ===========================
+  // ========================
   const logout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
+    localStorage.clear();
     setUser(null);
     navigate("/login");
   };
 
-  // Mobile back button
   const goBack = () => {
     setShowLeftPanel(true);
     setShowRightPanel(false);
   };
 
-  // ===========================
+  // ========================
   // UI
-  // ===========================
+  // ========================
   return (
     <div className="chat-container">
       {/* LEFT PANEL */}
       <div className={`left-panel ${showLeftPanel ? "show" : "hide"}`}>
         <div className="search-box">
           <input
-            type="text"
             value={searchPhone}
             onChange={(e) => setSearchPhone(e.target.value)}
             placeholder="Search by phone..."
@@ -307,7 +361,7 @@ export default function ChatApp({ user, setUser }) {
 
           {typingUser === selectedUser?._id && (
             <div className="typing-indicator">
-              {selectedUser.name} is typing...
+              {selectedUser?.name} is typing...
             </div>
           )}
 
@@ -317,7 +371,6 @@ export default function ChatApp({ user, setUser }) {
         {selectedUser && (
           <div className="input-area">
             <input
-              type="text"
               value={text}
               onChange={(e) => {
                 setText(e.target.value);
