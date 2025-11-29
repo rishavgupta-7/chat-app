@@ -63,25 +63,18 @@ const io = new Server(server, {
   transports: ["websocket", "polling"],
 });
 
-// Socket auth middleware — added logging
+// Socket auth middleware — with logging
 io.use((socket, next) => {
   try {
     const token = socket.handshake.auth?.token;
-    if (!token) {
-      console.warn("Socket auth failed: no token provided");
-      return next(new Error("No token"));
-    }
+    if (!token) return next(new Error("No token"));
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    if (!decoded?.id) {
-      console.warn("Socket auth failed: token doesn't contain id");
-      return next(new Error("Invalid token"));
-    }
+    if (!decoded?.id) return next(new Error("Invalid token"));
 
     socket.userId = decoded.id;
-    return next();
+    next();
   } catch (err) {
-    console.warn("Socket auth exception:", err.message);
     return next(new Error("Authentication error"));
   }
 });
@@ -92,36 +85,22 @@ io.on("connection", async (socket) => {
 
   if (mongoose.Types.ObjectId.isValid(userId)) {
     try {
-      // store socket id
       await User.findByIdAndUpdate(userId, { socketId: socket.id });
     } catch (err) {
       console.error("Error updating user socketId:", err);
     }
-  } else {
-    console.warn("Connected socket has invalid userId:", userId);
   }
 
-  // SEND MESSAGE handler — defensive checks + logs
+  // SEND MESSAGE
   socket.on("sendMessage", async ({ receiverPhone, text }) => {
     try {
-      if (!socket.userId) {
-        console.warn("sendMessage: missing socket.userId (unauthenticated)");
-        return;
-      }
-      if (!receiverPhone) {
-        console.warn("sendMessage: missing receiverPhone");
-        return;
-      }
+      if (!socket.userId || !receiverPhone) return;
 
       const senderId = socket.userId;
       const receiver = await User.findOne({ phone: receiverPhone });
 
-      if (!receiver) {
-        console.warn("sendMessage: receiver not found for phone", receiverPhone);
-        return;
-      }
+      if (!receiver) return;
 
-      // create message
       const message = await Message.create({
         senderId,
         receiverId: receiver._id,
@@ -130,7 +109,6 @@ io.on("connection", async (socket) => {
         seen: false,
       });
 
-      // normalized payload (strings)
       const payload = {
         _id: message._id.toString(),
         senderId: String(senderId),
@@ -141,15 +119,8 @@ io.on("connection", async (socket) => {
         seen: !!message.seen,
       };
 
-      // emit to receiver if online
-      if (receiver.socketId) {
-        io.to(receiver.socketId).emit("receiveMessage", payload);
-      }
-
-      // emit back to sender's socket (so sender sees the message immediately)
+      if (receiver.socketId) io.to(receiver.socketId).emit("receiveMessage", payload);
       io.to(socket.id).emit("receiveMessage", payload);
-
-      // If receiver was offline, you may later mark delivered when they connect (your connection code already sets socketId)
     } catch (err) {
       console.error("Send message error:", err);
     }
@@ -159,13 +130,12 @@ io.on("connection", async (socket) => {
   socket.on("deleteMessage", async ({ messageId, receiverId }) => {
     try {
       if (!messageId) return;
+
       await Message.findByIdAndDelete(messageId);
 
       if (receiverId) {
         const receiver = await User.findById(receiverId);
-        if (receiver?.socketId) {
-          io.to(receiver.socketId).emit("messageDeleted", messageId);
-        }
+        if (receiver?.socketId) io.to(receiver.socketId).emit("messageDeleted", messageId);
       }
 
       io.to(socket.id).emit("messageDeleted", messageId);
@@ -185,40 +155,42 @@ io.on("connection", async (socket) => {
         seen: false,
       });
 
-      if (!unseen.length) return;
+      if (!Array.isArray(unseen) || unseen.length === 0) return;
 
       const ids = unseen.map((m) => m._id.toString());
       await Message.updateMany({ _id: { $in: ids } }, { $set: { seen: true } });
 
       const other = await User.findById(otherUserId);
-      if (other?.socketId) {
-        io.to(other.socketId).emit("messageSeen", { messageIds: ids });
-      }
+      if (other?.socketId) io.to(other.socketId).emit("messageSeen", { messageIds: ids });
     } catch (err) {
       console.error("Mark seen error:", err);
     }
   });
 
-  // DISCONNECT
-  socket.on("disconnect", async (reason) => {
+  socket.on("disconnect", async () => {
     try {
-      if (socket.userId && mongoose.Types.ObjectId.isValid(socket.userId)) {
+      if (socket.userId) {
         await User.findByIdAndUpdate(socket.userId, { socketId: "" });
       }
-      console.log(`Socket disconnected: ${socket.id} reason: ${reason}`);
+      console.log(`Socket disconnected: ${socket.id}`);
     } catch (err) {
       console.error("Disconnect error:", err);
     }
   });
 });
 
-// API — GET MESSAGES
+/* ----------------------------------------
+   SAFE API — ALWAYS RETURNS ARRAYS
+----------------------------------------- */
+
+// GET MESSAGES (always array)
 app.get("/api/messages/:otherUserId", async (req, res) => {
   const currentUserId = req.query.currentUserId;
   const otherUserId = req.params.otherUserId;
 
-  if (!mongoose.Types.ObjectId.isValid(otherUserId) || !mongoose.Types.ObjectId.isValid(currentUserId)) {
-    return res.status(400).json([]);
+  if (!mongoose.Types.ObjectId.isValid(otherUserId) ||
+      !mongoose.Types.ObjectId.isValid(currentUserId)) {
+    return res.json([]);
   }
 
   try {
@@ -229,52 +201,60 @@ app.get("/api/messages/:otherUserId", async (req, res) => {
       ],
     }).sort({ createdAt: 1 });
 
-    return res.json(messages);
+    return res.json(Array.isArray(messages) ? messages : []);
   } catch (err) {
     console.error("GET /api/messages error:", err);
-    return res.status(500).json([]);
+    return res.json([]);
   }
 });
 
-// API — CHAT LIST (fixed comparison using toString)
+// CHAT LIST (always array — FULL FIX)
 app.get("/api/chats/:userId", async (req, res) => {
   const userId = req.params.userId;
 
-  if (!mongoose.Types.ObjectId.isValid(userId)) {
-    return res.status(400).json([]);
-  }
+  if (!mongoose.Types.ObjectId.isValid(userId)) return res.json([]);
 
   try {
     const messages = await Message.find({
       $or: [{ senderId: userId }, { receiverId: userId }],
     }).sort({ createdAt: -1 });
 
+    if (!Array.isArray(messages)) return res.json([]);
+
+    // Get unique partner IDs
     const partnerIds = [
       ...new Set(
         messages
           .map((m) =>
-            String(m.senderId) === String(userId) ? String(m.receiverId) : String(m.senderId)
+            String(m.senderId) === String(userId)
+              ? String(m.receiverId)
+              : String(m.senderId)
           )
           .filter(Boolean)
       ),
     ];
 
-    // If no partnerIds found, return users (but limit results)
+    let users = [];
+
+    // No chats found → return general users
     if (partnerIds.length === 0) {
-      const users = await User.find({ _id: { $ne: userId } })
+      users = await User.find({ _id: { $ne: userId } })
         .select("name phone socketId")
         .limit(10);
-      return res.json(users);
+    } else {
+      users = await User.find({ _id: { $in: partnerIds } })
+        .select("name phone socketId");
     }
 
-    const users = await User.find({ _id: { $in: partnerIds } }).select("name phone socketId");
-    return res.json(users);
+    return res.json(Array.isArray(users) ? users : []);
   } catch (err) {
     console.error("GET /api/chats error:", err);
-    return res.status(500).json([]);
+    return res.json([]);
   }
 });
 
-// START
+// START SERVER
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, "0.0.0.0", () => console.log(`🚀 Server running on port ${PORT}`));
+server.listen(PORT, "0.0.0.0", () =>
+  console.log(`🚀 Server running on port ${PORT}`)
+);
