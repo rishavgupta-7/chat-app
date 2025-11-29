@@ -1,6 +1,7 @@
 // aiRoutes.js
 import express from "express";
-import fetch from "node-fetch";
+// ❌ REMOVE THIS → Node 18+ already includes fetch
+// import fetch from "node-fetch";              // 🔥 UPDATED (removed)
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -22,7 +23,7 @@ router.post("/chat", async (req, res) => {
     return res.status(400).json({ error: "Messages array is required." });
   }
 
-  // Build final message list without modifying input
+  // Build final message list
   const finalMessages = [
     {
       role: "system",
@@ -32,7 +33,8 @@ router.post("/chat", async (req, res) => {
   ];
 
   try {
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    // 🔥 UPDATED: using native fetch (NO node-fetch)
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {   // 🔥 UPDATED
       method: "POST",
       headers: {
         "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
@@ -47,7 +49,6 @@ router.post("/chat", async (req, res) => {
 
     const data = await response.json();
 
-    // Defensive check
     if (!data.choices || !data.choices[0]) {
       return res.status(500).json({
         error: "AI returned no choices",
@@ -64,7 +65,12 @@ router.post("/chat", async (req, res) => {
 
   } catch (err) {
     console.error("AI Chat Error:", err.message);
-    res.status(500).json({ error: "AI request failed", details: err.message });
+    
+    // 🔥 UPDATED: better structured error response
+    res.status(500).json({
+      error: "AI request failed",
+      details: err.message
+    });
   }
 });
 
