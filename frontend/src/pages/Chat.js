@@ -5,16 +5,18 @@ import { useNavigate } from "react-router-dom";
 import "./Chat.css";
 
 export default function ChatApp({ user, setUser }) {
-  // Use relative backend URL (Render + Localhost)
-  const BACKEND_URL = "";
 
-  // Fix user.id always present
+  // ========================
+  // FIX USER.id ALWAYS EXISTS
+  // ========================
   const safeUser =
     user && user._id && !user.id ? { ...user, id: user._id } : user;
 
   const [socket, setSocket] = useState(null);
 
-  // Load selected user after refresh
+  // ========================
+  // RESTORE SELECTED USER
+  // ========================
   const [selectedUser, setSelectedUser] = useState(() => {
     try {
       const saved = JSON.parse(localStorage.getItem("selectedUser"));
@@ -26,7 +28,9 @@ export default function ChatApp({ user, setUser }) {
 
   const [chatList, setChatList] = useState([]);
 
-  // Load cached messages safely
+  // ========================
+  // RESTORE CACHED MESSAGES
+  // ========================
   const [messages, setMessages] = useState(() => {
     try {
       if (!selectedUser) return [];
@@ -46,22 +50,28 @@ export default function ChatApp({ user, setUser }) {
   const pressTimer = useRef(null);
   const navigate = useNavigate();
 
-  // Detect mobile
   const [showLeftPanel, setShowLeftPanel] = useState(true);
   const [showRightPanel, setShowRightPanel] = useState(true);
 
+  // ========================
+  // DETECT MOBILE
+  // ========================
   useEffect(() => {
     const isMobile = window.innerWidth <= 768;
     setShowRightPanel(!isMobile);
   }, []);
 
-  // Save selected user
+  // ========================
+  // SAVE SELECTED USER
+  // ========================
   useEffect(() => {
     if (selectedUser)
       localStorage.setItem("selectedUser", JSON.stringify(selectedUser));
   }, [selectedUser]);
 
-  // Save messages
+  // ========================
+  // SAVE MESSAGES
+  // ========================
   useEffect(() => {
     if (selectedUser)
       localStorage.setItem(
@@ -115,7 +125,7 @@ export default function ChatApp({ user, setUser }) {
   }, [selectedUser]);
 
   // ========================
-  // FETCH CHAT LIST
+  // FETCH CHAT LIST (SAFE)
   // ========================
   useEffect(() => {
     if (!safeUser?.id) return;
@@ -127,9 +137,8 @@ export default function ChatApp({ user, setUser }) {
 
         if (Array.isArray(data)) setChatList(data);
         else if (Array.isArray(data?.chats)) setChatList(data.chats);
-        else setChatList([]);
-      } catch {
-        setChatList([]);
+      } catch (err) {
+        console.log("Chat list fetch failed:", err);
       }
     };
 
@@ -137,10 +146,11 @@ export default function ChatApp({ user, setUser }) {
   }, [safeUser?.id]);
 
   // ========================
-  // LOAD MESSAGES AFTER REFRESH
+  // LOAD MESSAGES AFTER REFRESH (SAFE)
   // ========================
   useEffect(() => {
     if (!selectedUser) return;
+    if (!safeUser?.id) return;
 
     const loadMessages = async () => {
       try {
@@ -149,18 +159,20 @@ export default function ChatApp({ user, setUser }) {
         );
 
         const data = res.data;
+
         if (Array.isArray(data)) setMessages(data);
         else if (Array.isArray(data?.messages)) setMessages(data.messages);
-        else setMessages([]);
-      } catch {
-        setMessages([]);
+      } catch (err) {
+        console.log("Messages refresh failed:", err);
       }
     };
 
     loadMessages();
-  }, [selectedUser]);
+  }, [selectedUser, safeUser?.id]);
 
-  // Scroll bottom
+  // ========================
+  // SCROLL BOTTOM
+  // ========================
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -181,7 +193,6 @@ export default function ChatApp({ user, setUser }) {
       if (!chatList.some((c) => c._id === u._id))
         setChatList((prev) => [u, ...prev]);
 
-      // Load messages
       const msgRes = await axios.get(
         `/api/messages/${u._id}?currentUserId=${safeUser.id}`
       );
@@ -262,6 +273,7 @@ export default function ChatApp({ user, setUser }) {
 
   const deleteMessage = (id, receiverId) => {
     if (!socket) return;
+
     socket.emit("deleteMessage", { messageId: id, receiverId });
     setMessages((prev) => prev.filter((m) => m._id !== id));
   };
@@ -285,6 +297,7 @@ export default function ChatApp({ user, setUser }) {
   // ========================
   return (
     <div className="chat-container">
+      
       {/* LEFT PANEL */}
       <div className={`left-panel ${showLeftPanel ? "show" : "hide"}`}>
         <div className="search-box">
@@ -310,7 +323,9 @@ export default function ChatApp({ user, setUser }) {
                 onClick={() => startChat(c.phone)}
               >
                 <span
-                  className={`status-dot ${c.socketId ? "online" : "offline"}`}
+                  className={`status-dot ${
+                    c.socketId ? "online" : "offline"
+                  }`}
                 ></span>
                 <span>{c.name}</span>
               </div>
@@ -385,6 +400,7 @@ export default function ChatApp({ user, setUser }) {
           </div>
         )}
       </div>
+
     </div>
   );
 }
