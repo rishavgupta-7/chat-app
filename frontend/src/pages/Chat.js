@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom";
 import "./Chat.css";
 
 export default function ChatApp({ user, setUser }) {
+  // API calls use BACKEND_URL
   const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "";
 
   const [socket, setSocket] = useState(null);
@@ -30,9 +31,9 @@ export default function ChatApp({ user, setUser }) {
     setShowRightPanel(!isMobile);
   }, []);
 
-  // SOCKET.IO
+  // SOCKET.IO (important change: io("/") not io(BACKEND_URL))
   useEffect(() => {
-    const s = io(BACKEND_URL, {
+    const s = io("/", {
       transports: ["websocket", "polling"],
       auth: { token: localStorage.getItem("token") },
     });
@@ -78,7 +79,7 @@ export default function ChatApp({ user, setUser }) {
     });
 
     return () => s.disconnect();
-  }, [selectedUser, BACKEND_URL]);
+  }, [selectedUser]);
 
   // FETCH CHAT LIST
   useEffect(() => {
@@ -114,8 +115,8 @@ export default function ChatApp({ user, setUser }) {
       const res = await axios.get(
         `${BACKEND_URL}/api/auth/findByPhone/${targetPhone}`
       );
-      const u = res.data;
 
+      const u = res.data;
       setSelectedUser(u);
 
       if (!chatList.find((c) => c._id === u._id)) {
@@ -146,7 +147,7 @@ export default function ChatApp({ user, setUser }) {
     }
   };
 
-  // TYPING
+  // TYPING EVENTS
   useEffect(() => {
     if (!socket) return;
 
@@ -279,9 +280,7 @@ export default function ChatApp({ user, setUser }) {
               <div
                 key={m._id}
                 className={`message-row ${
-                  m.senderId === (user.id || user._id)
-                    ? "sent"
-                    : "received"
+                  m.senderId === (user.id || user._id) ? "sent" : "received"
                 }`}
                 onMouseDown={() => handlePressStart(m._id, m.receiverId)}
                 onMouseUp={handlePressEnd}
@@ -302,9 +301,7 @@ export default function ChatApp({ user, setUser }) {
                     <div className="tick">
                       {!m.delivered && !m.seen && <span>✔</span>}
                       {m.delivered && !m.seen && <span>✔✔</span>}
-                      {m.seen && (
-                        <span className="seen">✔✔</span>
-                      )}
+                      {m.seen && <span className="seen">✔✔</span>}
                     </div>
                   )}
                 </span>
