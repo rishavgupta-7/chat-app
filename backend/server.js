@@ -17,18 +17,22 @@ import aiRoutes from "./routes/aiRoutes.js";
 dotenv.config();
 connectDB();
 
-// ===== SERVE FRONTEND BUILD =====
+// =========================
+// PATH SETUP
+// =========================
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// ===== CORS =====
+// =========================
+// CORS FIX
+// =========================
 const allowedOrigins = [
-  process.env.CLIENT_URL || "*",
-];
+  process.env.CLIENT_URL, 
+  "https://chat-app-hwvk.onrender.com",
+  "http://localhost:3000",
+].filter(Boolean);
 
-// ===== EXPRESS APP =====
 const app = express();
-
 app.use(
   cors({
     origin: allowedOrigins,
@@ -38,28 +42,30 @@ app.use(
 
 app.use(express.json());
 
+// =========================
+// ROUTES
+// =========================
 app.use("/api/auth", authRoutes);
 app.use("/api/ai", aiRoutes);
 
 app.get("/api", (req, res) => res.send("API running ✔"));
 
+// =========================
+// SERVE FRONTEND (React)
+// =========================
 const frontendPath = path.join(__dirname, "../frontend/build");
 app.use(express.static(frontendPath));
 
-
-// =====================================================
-// ✅ CORRECT EXPRESS v5 CATCH-ALL ROUTE
-// (This one line was breaking everything before)
-// =====================================================
+// Express v5 FIX — correct catch-all
 app.get("*", (req, res) => {
   res.sendFile(path.join(frontendPath, "index.html"));
 });
 
-
-// ===== HTTP SERVER =====
+// =========================
+// SERVER + SOCKET.IO
+// =========================
 const server = http.createServer(app);
 
-// ===== SOCKET.IO =====
 const io = new Server(server, {
   cors: {
     origin: allowedOrigins,
@@ -68,7 +74,9 @@ const io = new Server(server, {
   transports: ["websocket", "polling"],
 });
 
-// ===== SOCKET AUTH =====
+// =========================
+// SOCKET AUTH
+// =========================
 io.use(async (socket, next) => {
   try {
     const token = socket.handshake.auth.token;
@@ -82,7 +90,9 @@ io.use(async (socket, next) => {
   }
 });
 
-// ===== SOCKET EVENTS =====
+// =========================
+// SOCKET EVENTS
+// =========================
 io.on("connection", async (socket) => {
   const userId = socket.userId;
 
@@ -98,6 +108,7 @@ io.on("connection", async (socket) => {
     try {
       const senderId = socket.userId;
       const receiver = await User.findOne({ phone: receiverPhone });
+
       if (!receiver) return;
 
       const message = await Message.create({
@@ -155,12 +166,13 @@ io.on("connection", async (socket) => {
         seen: false,
       });
 
-      if (unseen.length === 0) return;
+      if (!unseen.length) return;
 
       const ids = unseen.map((m) => m._id.toString());
       await Message.updateMany({ _id: { $in: ids } }, { $set: { seen: true } });
 
       const other = await User.findById(otherUserId);
+
       if (other?.socketId) {
         io.to(other.socketId).emit("messageSeen", { messageIds: ids });
       }
@@ -180,29 +192,9 @@ io.on("connection", async (socket) => {
   });
 });
 
-// ===== REST API: MARK SEEN =====
-app.post("/api/messages/mark-seen", async (req, res) => {
-  const { userId, otherId } = req.body;
-
-  try {
-    const unseen = await Message.find({
-      senderId: otherId,
-      receiverId: userId,
-      seen: false,
-    });
-
-    if (unseen.length === 0) return res.json({ success: true });
-
-    const ids = unseen.map((m) => m._id.toString());
-    await Message.updateMany({ _id: { $in: ids } }, { $set: { seen: true } });
-
-    res.json({ success: true });
-  } catch (err) {
-    res.json({ success: false });
-  }
-});
-
-// ===== REST API: GET MESSAGES =====
+// =========================
+// API — GET MESSAGES
+// =========================
 app.get("/api/messages/:otherUserId", async (req, res) => {
   const currentUserId = req.query.currentUserId;
   const otherUserId = req.params.otherUserId;
@@ -211,7 +203,7 @@ app.get("/api/messages/:otherUserId", async (req, res) => {
     !mongoose.Types.ObjectId.isValid(currentUserId) ||
     !mongoose.Types.ObjectId.isValid(otherUserId)
   ) {
-    return res.json([]); 
+    return res.json([]);
   }
 
   try {
@@ -223,12 +215,14 @@ app.get("/api/messages/:otherUserId", async (req, res) => {
     }).sort({ createdAt: 1 });
 
     res.json(messages);
-  } catch (err) {
+  } catch {
     res.json([]);
   }
 });
 
-// ===== REST API: CHAT LIST =====
+// =========================
+// API — CHAT LIST (FIXED)
+// =========================
 app.get("/api/chats/:userId", async (req, res) => {
   const userId = req.params.userId;
 
@@ -241,6 +235,7 @@ app.get("/api/chats/:userId", async (req, res) => {
       $or: [{ senderId: userId }, { receiverId: userId }],
     }).sort({ createdAt: -1 });
 
+    // Extract chat partners
     const partnerIds = [
       ...new Set(
         messages.map((m) =>
@@ -249,16 +244,26 @@ app.get("/api/chats/:userId", async (req, res) => {
       ),
     ];
 
+    // If no message history exists — FIX
+    if (partnerIds.length === 0) {
+      const users = await User.find({ _id: { $ne: userId } })
+        .select("name phone socketId")
+        .limit(10);
+      return res.json(users);
+    }
+
     const users = await User.find({ _id: { $in: partnerIds } })
       .select("name phone socketId");
 
     res.json(users);
-  } catch (err) {
+  } catch {
     res.json([]);
   }
 });
 
-// ===== START SERVER =====
+// =========================
+// START SERVER
+// =========================
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, "0.0.0.0", () =>
   console.log(`🚀 Server running on port ${PORT}`)
