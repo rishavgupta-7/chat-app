@@ -1,12 +1,10 @@
 import { useEffect, useState, useRef } from "react";
 import { io } from "socket.io-client";
-import axios from "axios";
+import API from "../api"; // <-- using /api baseURL
 import { useNavigate } from "react-router-dom";
 import "./Chat.css";
 
 export default function ChatApp({ user, setUser }) {
-  // API calls use BACKEND_URL
-  const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || "";
 
   const [socket, setSocket] = useState(null);
   const [chatList, setChatList] = useState([]);
@@ -31,7 +29,7 @@ export default function ChatApp({ user, setUser }) {
     setShowRightPanel(!isMobile);
   }, []);
 
-  // SOCKET.IO (important change: io("/") not io(BACKEND_URL))
+  // SOCKET.IO
   useEffect(() => {
     const s = io("/", {
       transports: ["websocket", "polling"],
@@ -46,35 +44,27 @@ export default function ChatApp({ user, setUser }) {
         (msg.senderId === selectedUser._id ||
           msg.receiverId === selectedUser._id)
       ) {
-        setMessages((prev) =>
-          Array.isArray(prev) ? [...prev, msg] : [msg]
-        );
+        setMessages((prev) => [...prev, msg]);
       }
     });
 
     s.on("messageDeleted", (messageId) => {
-      setMessages((prev) =>
-        Array.isArray(prev) ? prev.filter((m) => m._id !== messageId) : []
-      );
+      setMessages((prev) => prev.filter((m) => m._id !== messageId));
     });
 
     s.on("messageSeen", ({ messageIds }) => {
       setMessages((prev) =>
-        Array.isArray(prev)
-          ? prev.map((m) =>
-              messageIds.includes(m._id) ? { ...m, seen: true } : m
-            )
-          : []
+        prev.map((m) =>
+          messageIds.includes(m._id) ? { ...m, seen: true } : m
+        )
       );
     });
 
     s.on("messageDelivered", ({ messageId }) => {
       setMessages((prev) =>
-        Array.isArray(prev)
-          ? prev.map((m) =>
-              m._id === messageId ? { ...m, delivered: true } : m
-            )
-          : []
+        prev.map((m) =>
+          m._id === messageId ? { ...m, delivered: true } : m
+        )
       );
     });
 
@@ -84,13 +74,12 @@ export default function ChatApp({ user, setUser }) {
   // FETCH CHAT LIST
   useEffect(() => {
     if (!user) return;
-
     const realId = user.id || user._id;
 
     const fetchChats = async () => {
       try {
-        const res = await axios.get(`${BACKEND_URL}/api/chats/${realId}`);
-        setChatList(Array.isArray(res.data) ? res.data : []);
+        const res = await API.get(`/chats/${realId}`);
+        setChatList(res.data || []);
       } catch (err) {
         console.error("Fetch chat list error:", err);
         setChatList([]);
@@ -98,7 +87,7 @@ export default function ChatApp({ user, setUser }) {
     };
 
     fetchChats();
-  }, [user, BACKEND_URL]);
+  }, [user]);
 
   // AUTO SCROLL
   const scrollToBottom = () =>
@@ -112,24 +101,20 @@ export default function ChatApp({ user, setUser }) {
     if (!targetPhone) return alert("Enter phone number");
 
     try {
-      const res = await axios.get(
-        `${BACKEND_URL}/api/auth/findByPhone/${targetPhone}`
-      );
-
+      const res = await API.get(`/auth/findByPhone/${targetPhone}`);
       const u = res.data;
+
       setSelectedUser(u);
 
       if (!chatList.find((c) => c._id === u._id)) {
         setChatList((prev) => [u, ...prev]);
       }
 
-      const msgs = await axios.get(
-        `${BACKEND_URL}/api/messages/${u._id}?currentUserId=${
-          user.id || user._id
-        }`
+      const msgs = await API.get(
+        `/messages/${u._id}?currentUserId=${user.id || user._id}`
       );
 
-      setMessages(Array.isArray(msgs.data) ? msgs.data : []);
+      setMessages(msgs.data || []);
       setSearchPhone("");
 
       if (window.innerWidth <= 768) {
@@ -209,9 +194,7 @@ export default function ChatApp({ user, setUser }) {
     if (!socket) return;
 
     socket.emit("deleteMessage", { messageId, receiverId });
-    setMessages((prev) =>
-      Array.isArray(prev) ? prev.filter((m) => m._id !== messageId) : []
-    );
+    setMessages((prev) => prev.filter((m) => m._id !== messageId));
   };
 
   // LOGOUT
@@ -246,23 +229,20 @@ export default function ChatApp({ user, setUser }) {
         </div>
 
         <div className="chat-list">
-          {Array.isArray(chatList) &&
-            chatList.map((c) => (
-              <div
-                key={c._id}
-                className={`chat-item ${
-                  selectedUser?._id === c._id ? "active" : ""
-                }`}
-                onClick={() => startChat(c.phone)}
-              >
-                <span
-                  className={`status-dot ${
-                    c.socketId ? "online" : "offline"
-                  }`}
-                ></span>
-                <span>{c.name}</span>
-              </div>
-            ))}
+          {chatList.map((c) => (
+            <div
+              key={c._id}
+              className={`chat-item ${
+                selectedUser?._id === c._id ? "active" : ""
+              }`}
+              onClick={() => startChat(c.phone)}
+            >
+              <span
+                className={`status-dot ${c.socketId ? "online" : "offline"}`}
+              ></span>
+              <span>{c.name}</span>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -275,38 +255,37 @@ export default function ChatApp({ user, setUser }) {
         )}
 
         <div className="messages-area">
-          {Array.isArray(messages) &&
-            messages.map((m) => (
-              <div
-                key={m._id}
-                className={`message-row ${
-                  m.senderId === (user.id || user._id) ? "sent" : "received"
+          {messages.map((m) => (
+            <div
+              key={m._id}
+              className={`message-row ${
+                m.senderId === (user.id || user._id) ? "sent" : "received"
+              }`}
+              onMouseDown={() => handlePressStart(m._id, m.receiverId)}
+              onMouseUp={handlePressEnd}
+              onMouseLeave={handlePressEnd}
+              onTouchStart={() => handlePressStart(m._id, m.receiverId)}
+              onTouchEnd={handlePressEnd}
+            >
+              <span
+                className={`message-bubble ${
+                  m.senderId === (user.id || user._id)
+                    ? "sent-bubble"
+                    : "received-bubble"
                 }`}
-                onMouseDown={() => handlePressStart(m._id, m.receiverId)}
-                onMouseUp={handlePressEnd}
-                onMouseLeave={handlePressEnd}
-                onTouchStart={() => handlePressStart(m._id, m.receiverId)}
-                onTouchEnd={handlePressEnd}
               >
-                <span
-                  className={`message-bubble ${
-                    m.senderId === (user.id || user._id)
-                      ? "sent-bubble"
-                      : "received-bubble"
-                  }`}
-                >
-                  {m.text}
+                {m.text}
 
-                  {m.senderId === (user.id || user._id) && (
-                    <div className="tick">
-                      {!m.delivered && !m.seen && <span>✔</span>}
-                      {m.delivered && !m.seen && <span>✔✔</span>}
-                      {m.seen && <span className="seen">✔✔</span>}
-                    </div>
-                  )}
-                </span>
-              </div>
-            ))}
+                {m.senderId === (user.id || user._id) && (
+                  <div className="tick">
+                    {!m.delivered && !m.seen && <span>✔</span>}
+                    {m.delivered && !m.seen && <span>✔✔</span>}
+                    {m.seen && <span className="seen">✔✔</span>}
+                  </div>
+                )}
+              </span>
+            </div>
+          ))}
 
           <div ref={messagesEndRef} />
         </div>
