@@ -7,7 +7,7 @@ import "./Chat.css";
 export default function ChatApp({ user, setUser }) {
   const userId = user.id;
 
-  const SOCKET_URL = "https://chat-app-hwvk.onrender.com"; // Hardcoded
+  const SOCKET_URL = "https://chat-app-hwvk.onrender.com"; 
   const [socket, setSocket] = useState(null);
   const [chatList, setChatList] = useState([]);
   const [searchPhone, setSearchPhone] = useState("");
@@ -36,8 +36,8 @@ export default function ChatApp({ user, setUser }) {
     console.log("🔌 Connecting socket to:", SOCKET_URL);
 
     const s = io(SOCKET_URL, {
-      transports: ["websocket"],     // ✅ ONLY websocket for render
-      secure: true,                  // ✅ required for https
+      transports: ["websocket"],
+      secure: true,
       reconnection: true,
       reconnectionAttempts: 10,
       timeout: 20000,
@@ -95,12 +95,12 @@ export default function ChatApp({ user, setUser }) {
   useEffect(() => {
     const fetchChats = async () => {
       try {
-        const res = await API.get(`/chats/${userId}`);
-        console.log("📥 /chats RESPONSE:", res.data);
+        const res = await API.get(`/api/chats/${userId}`);
+        console.log("📥 /api/chats RESPONSE:", res.data);
 
         setChatList(Array.isArray(res.data) ? res.data : []);
       } catch (err) {
-        console.log("❌ /chats ERROR:", err);
+        console.log("❌ /api/chats ERROR:", err);
         setChatList([]);
       }
     };
@@ -118,8 +118,8 @@ export default function ChatApp({ user, setUser }) {
     if (!target) return alert("Enter phone number");
 
     try {
-      const res = await API.get(`/auth/findByPhone/${target}`);
-      console.log("📥 findByPhone RESPONSE:", res.data);
+      const res = await API.get(`/api/auth/findByPhone/${target}`);
+      console.log("📥 /api/auth/findByPhone RESPONSE:", res.data);
 
       const u = res.data;
       setSelectedUser(u);
@@ -128,8 +128,9 @@ export default function ChatApp({ user, setUser }) {
         setChatList((prev) => [u, ...prev]);
       }
 
-      const msgs = await API.get(`/messages/${u._id}?currentUserId=${userId}`);
-      console.log("📥 /messages RESPONSE:", msgs.data);
+      const msgs = await API.get(`/api/messages/${u._id}?currentUserId=${userId}`);
+      console.log("📥 /api/messages RESPONSE:", msgs.data);
+      console.log("📌 Is messages array?", Array.isArray(msgs.data));
 
       setMessages(Array.isArray(msgs.data) ? msgs.data : []);
 
@@ -234,7 +235,7 @@ export default function ChatApp({ user, setUser }) {
       {console.log("🧪 FINAL messages:", messages)}
 
       {/* LEFT PANEL */}
-      <div className={`left-panel ${showLeftPanel ? "show" : "hide"}`}>
+      <div className={`left-panel ${showLeftPanel ? "show" : "hide"}`}>  
 
         <div className="search-box">
           <input
