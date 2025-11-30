@@ -23,9 +23,8 @@ const __dirname = path.dirname(__filename);
 
 // ---------- ALLOWED ORIGINS ----------
 const allowedOrigins = [
-  process.env.CLIENT_URL,      // Render frontend
-  "http://localhost:3000",     // Local frontend
-  "https://chat-app-hwvk.onrender.com", // Your Render URL
+  process.env.CLIENT_URL,                 // Your Render frontend URL
+  "https://chat-app-hwvk.onrender.com",   // Fallback
 ].filter(Boolean);
 
 // ---------- EXPRESS ----------
@@ -46,7 +45,7 @@ app.use("/api/ai", aiRoutes);
 
 app.get("/api", (req, res) => res.send("API running ✔"));
 
-// ---------- SERVE FRONTEND (Render build folder) ----------
+// ---------- SERVE FRONTEND ----------
 const frontendPath = path.join(__dirname, "../frontend/build");
 app.use(express.static(frontendPath));
 
@@ -69,22 +68,22 @@ const io = new Server(server, {
 io.use((socket, next) => {
   try {
     const token = socket.handshake.auth?.token;
-    if (!token) return next(new Error("No token"));
+    if (!token) return next(new Error("No token provided"));
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     if (!decoded?.id) return next(new Error("Invalid token"));
 
     socket.userId = decoded.id;
     next();
-  } catch (err) {
-    next(new Error("Authentication error"));
+  } catch {
+    next(new Error("Authentication failed"));
   }
 });
 
 // ---------- SOCKET CONNECTION ----------
 io.on("connection", async (socket) => {
   const userId = socket.userId;
-  console.log(`🟢 Socket connected: ${socket.id} (user ${userId})`);
+  console.log(`🟢 Connected: socket=${socket.id} user=${userId}`);
 
   if (mongoose.Types.ObjectId.isValid(userId)) {
     await User.findByIdAndUpdate(userId, { socketId: socket.id });
@@ -93,8 +92,6 @@ io.on("connection", async (socket) => {
   // ---------- SEND MESSAGE ----------
   socket.on("sendMessage", async ({ receiverPhone, text }) => {
     try {
-      if (!socket.userId || !receiverPhone) return;
-
       const senderId = socket.userId;
       const receiver = await User.findOne({ phone: receiverPhone });
       if (!receiver) return;
@@ -120,10 +117,10 @@ io.on("connection", async (socket) => {
       // Send to receiver (if online)
       if (receiver.socketId) {
         io.to(receiver.socketId).emit("receiveMessage", payload);
-        io.to(senderId).emit("messageDelivered", { messageId: payload._id });
+        io.to(socket.id).emit("messageDelivered", { messageId: payload._id });
       }
 
-      // Always send to sender chat window
+      // Always send to sender
       io.to(socket.id).emit("receiveMessage", payload);
     } catch (err) {
       console.error("Send message error:", err);
@@ -145,7 +142,7 @@ io.on("connection", async (socket) => {
       // notify sender
       io.to(socket.id).emit("messageDeleted", messageId);
     } catch (err) {
-      console.error("Delete error:", err);
+      console.error("Delete message error:", err);
     }
   });
 
@@ -168,7 +165,6 @@ io.on("connection", async (socket) => {
       );
 
       const other = await User.findById(otherUserId);
-
       if (other?.socketId)
         io.to(other.socketId).emit("messageSeen", { messageIds: ids });
     } catch (err) {
@@ -180,7 +176,7 @@ io.on("connection", async (socket) => {
   socket.on("disconnect", async () => {
     try {
       await User.findByIdAndUpdate(socket.userId, { socketId: "" });
-      console.log(`🔴 User ${socket.userId} disconnected`);
+      console.log(`🔴 Disconnected user ${socket.userId}`);
     } catch (err) {
       console.error("Disconnect error:", err);
     }
@@ -189,7 +185,7 @@ io.on("connection", async (socket) => {
 
 // ---------- SAFE GET MESSAGES ----------
 app.get("/api/messages/:otherUserId", async (req, res) => {
-  const currentUserId = req.query.currentUserId;
+  const { currentUserId } = req.query;
   const otherUserId = req.params.otherUserId;
 
   if (
@@ -207,9 +203,8 @@ app.get("/api/messages/:otherUserId", async (req, res) => {
       ],
     }).sort({ createdAt: 1 });
 
-    res.json(Array.isArray(messages) ? messages : []);
+    res.json(messages);
   } catch (err) {
-    console.error("GET /api/messages error:", err);
     res.json([]);
   }
 });
@@ -236,9 +231,8 @@ app.get("/api/chats/:userId", async (req, res) => {
     const users = await User.find({ _id: { $in: partnerIds } })
       .select("name phone socketId");
 
-    res.json(Array.isArray(users) ? users : []);
-  } catch (err) {
-    console.error("GET /api/chats error:", err);
+    res.json(users);
+  } catch {
     res.json([]);
   }
 });
