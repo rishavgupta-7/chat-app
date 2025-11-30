@@ -1,3 +1,4 @@
+// server.js (Render-Ready Full Version)
 import express from "express";
 import http from "http";
 import { Server } from "socket.io";
@@ -10,88 +11,121 @@ import { fileURLToPath } from "url";
 
 import connectDB from "./config/db.js";
 import authRoutes from "./routes/authRoutes.js";
-import aiRoutes from "./routes/aiRoutes.js";
 import User from "./models/User.js";
 import Message from "./models/Message.js";
+import aiRoutes from "./routes/aiRoutes.js";
 
 dotenv.config();
 connectDB();
 
-// ---------- PATH FIX ----------
+// ----------------------
+// FIX __dirname for ES Modules
+// ----------------------
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// ---------- FINAL SINGLE ORIGIN ----------
-const FRONTEND_URL =
-  process.env.CLIENT_URL || "https://chat-app-hwvk.onrender.com";
-
-// ---------- EXPRESS ----------
+// ----------------------
+// EXPRESS APP
+// ----------------------
 const app = express();
 
+// ⭐ Render allows * by default (safe because you use JWT auth)
 app.use(
   cors({
-    origin: [FRONTEND_URL, "*"],   // ✅ FIXED — must be array
+    origin: "*",
     credentials: true,
   })
 );
 
 app.use(express.json());
 
-// ---------- ROUTES ----------
+// API ROUTES
 app.use("/api/auth", authRoutes);
 app.use("/api/ai", aiRoutes);
 
-app.get("/api", (req, res) => res.send("API running ✔"));
-
-// ---------- SERVE FRONTEND ----------
-const frontendPath = path.join(__dirname, "../frontend/build");
-app.use(express.static(frontendPath));
-
-app.get("*", (req, res) => {
-  res.sendFile(path.join(frontendPath, "index.html"));
-});
-
-// ---------- HTTP + SOCKET.IO ----------
+// ----------------------
+// HTTP SERVER + SOCKET
+// ----------------------
 const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: [FRONTEND_URL, "*"],  // ✅ FIXED
+    origin: "*",
     methods: ["GET", "POST"],
-    credentials: true,
   },
   transports: ["websocket", "polling"],
 });
 
-// ---------- SOCKET AUTH ----------
-io.use((socket, next) => {
+// ----------------------
+// SOCKET AUTH
+// ----------------------
+io.use(async (socket, next) => {
   try {
-    const token = socket.handshake.auth?.token;
+    const token = socket.handshake.auth.token;
     if (!token) return next(new Error("No token provided"));
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    if (!decoded?.id) return next(new Error("Invalid token"));
-
     socket.userId = decoded.id;
     next();
-  } catch {
-    next(new Error("Authentication failed"));
+  } catch (err) {
+    console.log("❌ Socket auth failed:", err.message);
+    next(new Error("Authentication error"));
   }
 });
 
-// ---------- SOCKET CONNECTION ----------
+// ----------------------
+// SOCKET CONNECTION
+// ----------------------
 io.on("connection", async (socket) => {
   const userId = socket.userId;
-  console.log(`🟢 Connected: socket=${socket.id} user=${userId}`);
 
-  if (mongoose.Types.ObjectId.isValid(userId)) {
+  try {
     await User.findByIdAndUpdate(userId, { socketId: socket.id });
+    console.log(`🟢 User ${userId} connected: ${socket.id}`);
+
+    // SEND UNDELIVERED MESSAGES
+    const undelivered = await Message.find({
+      receiverId: userId,
+      delivered: { $ne: true },
+    });
+
+    for (const msg of undelivered) {
+      io.to(socket.id).emit("receiveMessage", msg);
+      msg.delivered = true;
+      await msg.save();
+
+      const sender = await User.findById(msg.senderId);
+      if (sender?.socketId) {
+        io.to(sender.socketId).emit("messageDelivered", {
+          messageId: msg._id.toString(),
+        });
+      }
+    }
+  } catch (err) {
+    console.log("Socket update error:", err.message);
   }
 
-  // ---------- SEND MESSAGE ----------
+  // ----------------------
+  // TYPING
+  // ----------------------
+  socket.on("typing", async ({ receiverId }) => {
+    const receiver = await User.findById(receiverId);
+    if (receiver?.socketId)
+      io.to(receiver.socketId).emit("typing", { senderId: userId });
+  });
+
+  socket.on("stopTyping", async ({ receiverId }) => {
+    const receiver = await User.findById(receiverId);
+    if (receiver?.socketId)
+      io.to(receiver.socketId).emit("stopTyping", { senderId: userId });
+  });
+
+  // ----------------------
+  // SEND MESSAGE
+  // ----------------------
   socket.on("sendMessage", async ({ receiverPhone, text }) => {
     try {
-      const senderId = socket.userId;
+      const senderId = userId;
       const receiver = await User.findOne({ phone: receiverPhone });
       if (!receiver) return;
 
@@ -105,7 +139,7 @@ io.on("connection", async (socket) => {
 
       const payload = {
         _id: message._id.toString(),
-        senderId: senderId.toString(),
+        senderId,
         receiverId: receiver._id.toString(),
         text,
         createdAt: message.createdAt,
@@ -113,85 +147,96 @@ io.on("connection", async (socket) => {
         seen: message.seen,
       };
 
+      // Send to receiver
       if (receiver.socketId) {
         io.to(receiver.socketId).emit("receiveMessage", payload);
-
-        // delivered
         io.to(socket.id).emit("messageDelivered", {
           messageId: payload._id,
         });
       }
 
+      // Send to sender
       io.to(socket.id).emit("receiveMessage", payload);
     } catch (err) {
-      console.error("Send message error:", err);
+      console.log("Send message error:", err.message);
     }
   });
 
-  // ---------- DELETE MESSAGE ----------
+  // ----------------------
+  // DELETE MESSAGE
+  // ----------------------
   socket.on("deleteMessage", async ({ messageId, receiverId }) => {
     try {
       await Message.findByIdAndDelete(messageId);
 
-      if (receiverId) {
-        const receiver = await User.findById(receiverId);
-        if (receiver?.socketId)
-          io.to(receiver.socketId).emit("messageDeleted", messageId);
-      }
+      const receiver = await User.findById(receiverId);
+      if (receiver?.socketId)
+        io.to(receiver.socketId).emit("messageDeleted", messageId);
 
       io.to(socket.id).emit("messageDeleted", messageId);
     } catch (err) {
-      console.error("Delete message error:", err);
+      console.log("Delete message error:", err.message);
     }
   });
 
-  // ---------- MARK SEEN ----------
-  socket.on("markSeen", async ({ userId: currentUserId, otherUserId }) => {
+  // ----------------------
+  // MARK SEEN
+  // ----------------------
+  socket.on("markSeen", async ({ userId, otherUserId }) => {
     try {
       const unseen = await Message.find({
         senderId: otherUserId,
-        receiverId: currentUserId,
+        receiverId: userId,
         seen: false,
       });
 
-      if (!unseen.length) return;
+      if (unseen.length === 0) return;
 
       const ids = unseen.map((m) => m._id.toString());
 
-      await Message.updateMany(
-        { _id: { $in: ids } },
-        { $set: { seen: true } }
-      );
+      await Message.updateMany({ _id: { $in: ids } }, { seen: true });
 
       const other = await User.findById(otherUserId);
       if (other?.socketId)
         io.to(other.socketId).emit("messageSeen", { messageIds: ids });
     } catch (err) {
-      console.error("Mark seen error:", err);
+      console.log("Mark seen error:", err.message);
     }
   });
 
-  // ---------- DISCONNECT ----------
   socket.on("disconnect", async () => {
-    try {
-      await User.findByIdAndUpdate(socket.userId, { socketId: "" });
-      console.log(`🔴 Disconnected user ${socket.userId}`);
-    } catch (err) {
-      console.error("Disconnect error:", err);
-    }
+    await User.findByIdAndUpdate(userId, { socketId: "" });
+    console.log(`🔴 User ${userId} disconnected`);
   });
 });
 
-// ---------- SAFE GET MESSAGES ----------
-app.get("/api/messages/:otherUserId", async (req, res) => {
-  const { currentUserId } = req.query;
-  const otherUserId = req.params.otherUserId;
+// --------------------------------------------------
+// REST API ENDPOINTS
+// --------------------------------------------------
+app.post("/api/messages/mark-seen", async (req, res) => {
+  const { userId, otherId } = req.body;
 
-  if (
-    !mongoose.Types.ObjectId.isValid(otherUserId) ||
-    !mongoose.Types.ObjectId.isValid(currentUserId)
-  )
-    return res.json([]);
+  try {
+    const unseen = await Message.find({
+      senderId: otherId,
+      receiverId: userId,
+      seen: false,
+    });
+
+    const ids = unseen.map((m) => m._id.toString());
+
+    await Message.updateMany({ _id: { $in: ids } }, { seen: true });
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// FETCH MESSAGES
+app.get("/api/messages/:otherUserId", async (req, res) => {
+  const currentUserId = req.query.currentUserId;
+  const otherUserId = req.params.otherUserId;
 
   try {
     const messages = await Message.find({
@@ -202,16 +247,14 @@ app.get("/api/messages/:otherUserId", async (req, res) => {
     }).sort({ createdAt: 1 });
 
     res.json(messages);
-  } catch {
-    res.json([]);
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
   }
 });
 
-// ---------- SAFE CHAT LIST ----------
+// FETCH CHAT LIST
 app.get("/api/chats/:userId", async (req, res) => {
   const userId = req.params.userId;
-
-  if (!mongoose.Types.ObjectId.isValid(userId)) return res.json([]);
 
   try {
     const messages = await Message.find({
@@ -226,17 +269,29 @@ app.get("/api/chats/:userId", async (req, res) => {
       ),
     ];
 
-    const users = await User.find({ _id: { $in: partnerIds } })
-      .select("name phone socketId");
+    const users = await User.find({ _id: { $in: partnerIds } }).select(
+      "name phone socketId"
+    );
 
     res.json(users);
-  } catch {
-    res.json([]);
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
   }
 });
 
-// ---------- START SERVER ----------
+// --------------------------------------------------
+// SERVE FRONTEND BUILD (REACT)
+// --------------------------------------------------
+app.use(express.static(path.join(__dirname, "frontend", "build")));
+
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "frontend", "build", "index.html"));
+});
+
+// ----------------------
+// START SERVER
+// ----------------------
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, "0.0.0.0", () =>
-  console.log(`🚀 Server running on port ${PORT}`)
-);
+server.listen(PORT, "0.0.0.0", () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+});
