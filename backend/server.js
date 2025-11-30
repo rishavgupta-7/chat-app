@@ -29,7 +29,6 @@ const __dirname = path.dirname(__filename);
 // ----------------------
 const app = express();
 
-// ⭐ Render allows * by default (safe because you use JWT auth)
 app.use(
   cors({
     origin: "*",
@@ -83,7 +82,7 @@ io.on("connection", async (socket) => {
     await User.findByIdAndUpdate(userId, { socketId: socket.id });
     console.log(`🟢 User ${userId} connected: ${socket.id}`);
 
-    // SEND UNDELIVERED MESSAGES
+    // Undelivered messages
     const undelivered = await Message.find({
       receiverId: userId,
       delivered: { $ne: true },
@@ -105,9 +104,6 @@ io.on("connection", async (socket) => {
     console.log("Socket update error:", err.message);
   }
 
-  // ----------------------
-  // TYPING
-  // ----------------------
   socket.on("typing", async ({ receiverId }) => {
     const receiver = await User.findById(receiverId);
     if (receiver?.socketId)
@@ -120,9 +116,6 @@ io.on("connection", async (socket) => {
       io.to(receiver.socketId).emit("stopTyping", { senderId: userId });
   });
 
-  // ----------------------
-  // SEND MESSAGE
-  // ----------------------
   socket.on("sendMessage", async ({ receiverPhone, text }) => {
     try {
       const senderId = userId;
@@ -147,7 +140,6 @@ io.on("connection", async (socket) => {
         seen: message.seen,
       };
 
-      // Send to receiver
       if (receiver.socketId) {
         io.to(receiver.socketId).emit("receiveMessage", payload);
         io.to(socket.id).emit("messageDelivered", {
@@ -155,16 +147,12 @@ io.on("connection", async (socket) => {
         });
       }
 
-      // Send to sender
       io.to(socket.id).emit("receiveMessage", payload);
     } catch (err) {
       console.log("Send message error:", err.message);
     }
   });
 
-  // ----------------------
-  // DELETE MESSAGE
-  // ----------------------
   socket.on("deleteMessage", async ({ messageId, receiverId }) => {
     try {
       await Message.findByIdAndDelete(messageId);
@@ -179,9 +167,6 @@ io.on("connection", async (socket) => {
     }
   });
 
-  // ----------------------
-  // MARK SEEN
-  // ----------------------
   socket.on("markSeen", async ({ userId, otherUserId }) => {
     try {
       const unseen = await Message.find({
@@ -193,7 +178,6 @@ io.on("connection", async (socket) => {
       if (unseen.length === 0) return;
 
       const ids = unseen.map((m) => m._id.toString());
-
       await Message.updateMany({ _id: { $in: ids } }, { seen: true });
 
       const other = await User.findById(otherUserId);
@@ -280,12 +264,14 @@ app.get("/api/chats/:userId", async (req, res) => {
 });
 
 // --------------------------------------------------
-// SERVE FRONTEND BUILD (REACT)
+// SERVE FRONTEND BUILD (FIXED PATH)
 // --------------------------------------------------
-app.use(express.static(path.join(__dirname, "frontend", "build")));
+
+// ⭐⭐⭐ FIXED: correct build path
+app.use(express.static(path.join(__dirname, "../frontend/build")));
 
 app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "frontend", "build", "index.html"));
+  res.sendFile(path.join(__dirname, "../frontend/build", "index.html"));
 });
 
 // ----------------------
