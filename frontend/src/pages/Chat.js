@@ -1,11 +1,10 @@
 import { useEffect, useState, useRef } from "react";
 import { io } from "socket.io-client";
-import API from "../api"; // <-- using /api baseURL
+import API from "../api";
 import { useNavigate } from "react-router-dom";
 import "./Chat.css";
 
 export default function ChatApp({ user, setUser }) {
-
   const [socket, setSocket] = useState(null);
   const [chatList, setChatList] = useState([]);
   const [searchPhone, setSearchPhone] = useState("");
@@ -79,7 +78,7 @@ export default function ChatApp({ user, setUser }) {
     const fetchChats = async () => {
       try {
         const res = await API.get(`/chats/${realId}`);
-        setChatList(res.data || []);
+        setChatList(Array.isArray(res.data) ? res.data : []);
       } catch (err) {
         console.error("Fetch chat list error:", err);
         setChatList([]);
@@ -89,7 +88,7 @@ export default function ChatApp({ user, setUser }) {
     fetchChats();
   }, [user]);
 
-  // AUTO SCROLL
+  // Auto scroll to bottom
   const scrollToBottom = () =>
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
 
@@ -114,7 +113,7 @@ export default function ChatApp({ user, setUser }) {
         `/messages/${u._id}?currentUserId=${user.id || user._id}`
       );
 
-      setMessages(msgs.data || []);
+      setMessages(Array.isArray(msgs.data) ? msgs.data : []);
       setSearchPhone("");
 
       if (window.innerWidth <= 768) {
@@ -132,7 +131,7 @@ export default function ChatApp({ user, setUser }) {
     }
   };
 
-  // TYPING EVENTS
+  // TYPING
   useEffect(() => {
     if (!socket) return;
 
@@ -229,20 +228,23 @@ export default function ChatApp({ user, setUser }) {
         </div>
 
         <div className="chat-list">
-          {chatList.map((c) => (
-            <div
-              key={c._id}
-              className={`chat-item ${
-                selectedUser?._id === c._id ? "active" : ""
-              }`}
-              onClick={() => startChat(c.phone)}
-            >
-              <span
-                className={`status-dot ${c.socketId ? "online" : "offline"}`}
-              ></span>
-              <span>{c.name}</span>
-            </div>
-          ))}
+          {Array.isArray(chatList) &&
+            chatList.map((c) => (
+              <div
+                key={c._id}
+                className={`chat-item ${
+                  selectedUser?._id === c._id ? "active" : ""
+                }`}
+                onClick={() => startChat(c.phone)}
+              >
+                <span
+                  className={`status-dot ${
+                    c.socketId ? "online" : "offline"
+                  }`}
+                ></span>
+                <span>{c.name}</span>
+              </div>
+            ))}
         </div>
       </div>
 
@@ -255,37 +257,38 @@ export default function ChatApp({ user, setUser }) {
         )}
 
         <div className="messages-area">
-          {messages.map((m) => (
-            <div
-              key={m._id}
-              className={`message-row ${
-                m.senderId === (user.id || user._id) ? "sent" : "received"
-              }`}
-              onMouseDown={() => handlePressStart(m._id, m.receiverId)}
-              onMouseUp={handlePressEnd}
-              onMouseLeave={handlePressEnd}
-              onTouchStart={() => handlePressStart(m._id, m.receiverId)}
-              onTouchEnd={handlePressEnd}
-            >
-              <span
-                className={`message-bubble ${
-                  m.senderId === (user.id || user._id)
-                    ? "sent-bubble"
-                    : "received-bubble"
+          {Array.isArray(messages) &&
+            messages.map((m) => (
+              <div
+                key={m._id}
+                className={`message-row ${
+                  m.senderId === (user.id || user._id) ? "sent" : "received"
                 }`}
+                onMouseDown={() => handlePressStart(m._id, m.receiverId)}
+                onMouseUp={handlePressEnd}
+                onMouseLeave={handlePressEnd}
+                onTouchStart={() => handlePressStart(m._id, m.receiverId)}
+                onTouchEnd={handlePressEnd}
               >
-                {m.text}
+                <span
+                  className={`message-bubble ${
+                    m.senderId === (user.id || user._id)
+                      ? "sent-bubble"
+                      : "received-bubble"
+                  }`}
+                >
+                  {m.text}
 
-                {m.senderId === (user.id || user._id) && (
-                  <div className="tick">
-                    {!m.delivered && !m.seen && <span>✔</span>}
-                    {m.delivered && !m.seen && <span>✔✔</span>}
-                    {m.seen && <span className="seen">✔✔</span>}
-                  </div>
-                )}
-              </span>
-            </div>
-          ))}
+                  {m.senderId === (user.id || user._id) && (
+                    <div className="tick">
+                      {!m.delivered && !m.seen && <span>✔</span>}
+                      {m.delivered && !m.seen && <span>✔✔</span>}
+                      {m.seen && <span className="seen">✔✔</span>}
+                    </div>
+                  )}
+                </span>
+              </div>
+            ))}
 
           <div ref={messagesEndRef} />
         </div>
