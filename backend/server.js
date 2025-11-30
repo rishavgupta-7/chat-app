@@ -30,7 +30,7 @@ const app = express();
 
 app.use(
   cors({
-    origin: FRONTEND_URL,
+    origin: [FRONTEND_URL, "*"],   // ✅ FIXED — must be array
     credentials: true,
   })
 );
@@ -56,7 +56,7 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: FRONTEND_URL,
+    origin: [FRONTEND_URL, "*"],  // ✅ FIXED
     methods: ["GET", "POST"],
     credentials: true,
   },
@@ -115,7 +115,11 @@ io.on("connection", async (socket) => {
 
       if (receiver.socketId) {
         io.to(receiver.socketId).emit("receiveMessage", payload);
-        io.to(socket.id).emit("messageDelivered", { messageId: payload._id });
+
+        // delivered
+        io.to(socket.id).emit("messageDelivered", {
+          messageId: payload._id,
+        });
       }
 
       io.to(socket.id).emit("receiveMessage", payload);
@@ -150,7 +154,7 @@ io.on("connection", async (socket) => {
         seen: false,
       });
 
-      if (unseen.length === 0) return;
+      if (!unseen.length) return;
 
       const ids = unseen.map((m) => m._id.toString());
 
@@ -186,9 +190,8 @@ app.get("/api/messages/:otherUserId", async (req, res) => {
   if (
     !mongoose.Types.ObjectId.isValid(otherUserId) ||
     !mongoose.Types.ObjectId.isValid(currentUserId)
-  ) {
+  )
     return res.json([]);
-  }
 
   try {
     const messages = await Message.find({
