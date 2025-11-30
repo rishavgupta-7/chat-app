@@ -31,12 +31,16 @@ export default function ChatApp({ user, setUser }) {
     setShowRightPanel(!isMobile);
   }, []);
 
-  /* ---------------- SOCKET ---------------- */
+  /* ---------------- SOCKET.IO ---------------- */
   useEffect(() => {
     console.log("🔌 Connecting socket to:", SOCKET_URL);
 
     const s = io(SOCKET_URL, {
-      transports: ["websocket", "polling"],
+      transports: ["websocket"],     // ✅ ONLY websocket for render
+      secure: true,                  // ✅ required for https
+      reconnection: true,
+      reconnectionAttempts: 10,
+      timeout: 20000,
       auth: { token: localStorage.getItem("token") },
     });
 
@@ -45,10 +49,12 @@ export default function ChatApp({ user, setUser }) {
       setSocket(s);
     });
 
+    s.on("disconnect", () => {
+      console.log("🔴 SOCKET DISCONNECTED");
+    });
+
     s.on("receiveMessage", (msg) => {
       console.log("⚡ SOCKET receiveMessage:", msg);
-      console.log("📌 selectedUser:", selectedUser);
-
       if (!selectedUser) return;
 
       if (msg.senderId === selectedUser._id || msg.receiverId === selectedUser._id) {
@@ -57,12 +63,12 @@ export default function ChatApp({ user, setUser }) {
     });
 
     s.on("messageDeleted", (messageId) => {
-      console.log("⚡ SOCKET messageDeleted:", messageId);
+      console.log("⚡ messageDeleted:", messageId);
       setMessages((prev) => prev.filter((m) => m._id !== messageId));
     });
 
     s.on("messageSeen", ({ messageIds }) => {
-      console.log("⚡ SOCKET messageSeen:", messageIds);
+      console.log("⚡ messageSeen:", messageIds);
       setMessages((prev) =>
         prev.map((m) =>
           messageIds.includes(m._id) ? { ...m, seen: true } : m
@@ -71,7 +77,7 @@ export default function ChatApp({ user, setUser }) {
     });
 
     s.on("messageDelivered", ({ messageId }) => {
-      console.log("⚡ SOCKET messageDelivered:", messageId);
+      console.log("⚡ messageDelivered:", messageId);
       setMessages((prev) =>
         prev.map((m) =>
           m._id === messageId ? { ...m, delivered: true } : m
@@ -80,7 +86,7 @@ export default function ChatApp({ user, setUser }) {
     });
 
     return () => {
-      console.log("🔌 SOCKET DISCONNECTED");
+      console.log("🔌 SOCKET CLEANUP DISCONNECT");
       s.disconnect();
     };
   }, [selectedUser]);
@@ -90,9 +96,7 @@ export default function ChatApp({ user, setUser }) {
     const fetchChats = async () => {
       try {
         const res = await API.get(`/chats/${userId}`);
-
         console.log("📥 /chats RESPONSE:", res.data);
-        console.log("📌 Is chats array?", Array.isArray(res.data));
 
         setChatList(Array.isArray(res.data) ? res.data : []);
       } catch (err) {
@@ -125,11 +129,10 @@ export default function ChatApp({ user, setUser }) {
       }
 
       const msgs = await API.get(`/messages/${u._id}?currentUserId=${userId}`);
-
       console.log("📥 /messages RESPONSE:", msgs.data);
-      console.log("📌 Is messages array?", Array.isArray(msgs.data));
 
       setMessages(Array.isArray(msgs.data) ? msgs.data : []);
+
       setSearchPhone("");
 
       socket?.emit("markSeen", {
@@ -152,12 +155,12 @@ export default function ChatApp({ user, setUser }) {
     if (!socket) return;
 
     socket.on("typing", ({ senderId }) => {
-      console.log("⌨️ typing event:", senderId);
+      console.log("⌨ typing:", senderId);
       setTypingUser(senderId);
     });
 
     socket.on("stopTyping", () => {
-      console.log("⌨️ stopTyping event");
+      console.log("⌨ stopTyping");
       setTypingUser(null);
     });
 
@@ -212,7 +215,7 @@ export default function ChatApp({ user, setUser }) {
   const handlePressEnd = () => clearTimeout(pressTimer.current);
 
   const deleteMessage = (messageId, receiverId) => {
-    console.log("🗑️ Deleting message:", messageId);
+    console.log("🗑 deleting:", messageId);
     socket?.emit("deleteMessage", { messageId, receiverId });
     setMessages((prev) => prev.filter((m) => m._id !== messageId));
   };
@@ -228,11 +231,11 @@ export default function ChatApp({ user, setUser }) {
   /* ---------------- UI ---------------- */
   return (
     <div className="chat-container">
-      {/* Debug final messages before map */}
-      {console.log("🧪 FINAL messages before map:", messages)}
+      {console.log("🧪 FINAL messages:", messages)}
 
       {/* LEFT PANEL */}
       <div className={`left-panel ${showLeftPanel ? "show" : "hide"}`}>
+
         <div className="search-box">
           <input
             type="text"
@@ -262,12 +265,6 @@ export default function ChatApp({ user, setUser }) {
 
       {/* RIGHT PANEL */}
       <div className={`right-panel ${showRightPanel ? "show" : "hide"}`}>
-        {window.innerWidth <= 768 && selectedUser && (
-          <button className="back-btn" onClick={() => {
-            setShowLeftPanel(true);
-            setShowRightPanel(false);
-          }}>← Back</button>
-        )}
 
         <div className="messages-area">
           {messages.map((m) => (
@@ -317,7 +314,9 @@ export default function ChatApp({ user, setUser }) {
               placeholder="Type a message..."
               className="text-input"
             />
-            <button className="send-btn" onClick={sendMessage}>Send</button>
+            <button className="send-btn" onClick={sendMessage}>
+              Send
+            </button>
           </div>
         )}
       </div>
