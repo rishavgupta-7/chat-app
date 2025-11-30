@@ -5,8 +5,9 @@ import { useNavigate } from "react-router-dom";
 import "./Chat.css";
 
 export default function ChatApp({ user, setUser }) {
-  const userId = user.id; // always exists
+  const userId = user.id;
 
+  const SOCKET_URL = "https://chat-app-hwvk.onrender.com";   // 🔥 Hardcoded
   const [socket, setSocket] = useState(null);
   const [chatList, setChatList] = useState([]);
   const [searchPhone, setSearchPhone] = useState("");
@@ -23,16 +24,16 @@ export default function ChatApp({ user, setUser }) {
   const typingTimeout = useRef(null);
   const navigate = useNavigate();
 
-  /* ------------------- MOBILE ------------------- */
+  /* ---------------- MOBILE ---------------- */
   useEffect(() => {
     const isMobile = window.innerWidth <= 768;
     setShowLeftPanel(true);
     setShowRightPanel(!isMobile);
   }, []);
 
-  /* ------------------- SOCKET.IO ------------------- */
+  /* ---------------- SOCKET.IO (Hardcoded URL) ---------------- */
   useEffect(() => {
-    const s = io("/", {
+    const s = io(SOCKET_URL, {
       transports: ["websocket", "polling"],
       auth: { token: localStorage.getItem("token") },
     });
@@ -53,7 +54,9 @@ export default function ChatApp({ user, setUser }) {
     s.on("messageSeen", ({ messageIds }) => {
       setMessages((prev) =>
         prev.map((m) =>
-          messageIds.includes(m._id) ? { ...m, seen: true } : m
+          messageIds.includes(m._id)
+            ? { ...m, seen: true }
+            : m
         )
       );
     });
@@ -61,7 +64,9 @@ export default function ChatApp({ user, setUser }) {
     s.on("messageDelivered", ({ messageId }) => {
       setMessages((prev) =>
         prev.map((m) =>
-          m._id === messageId ? { ...m, delivered: true } : m
+          m._id === messageId
+            ? { ...m, delivered: true }
+            : m
         )
       );
     });
@@ -69,7 +74,7 @@ export default function ChatApp({ user, setUser }) {
     return () => s.disconnect();
   }, [selectedUser]);
 
-  /* ------------------- FETCH CHAT LIST ------------------- */
+  /* ---------------- FETCH CHAT LIST ---------------- */
   useEffect(() => {
     const fetchChats = async () => {
       try {
@@ -82,12 +87,12 @@ export default function ChatApp({ user, setUser }) {
     fetchChats();
   }, [userId]);
 
-  /* ------------------- AUTO SCROLL ------------------- */
+  /* ---------------- AUTO SCROLL ---------------- */
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  /* ------------------- START CHAT ------------------- */
+  /* ---------------- START CHAT ---------------- */
   const startChat = async (phone) => {
     const target = (phone || searchPhone).trim();
     if (!target) return alert("Enter phone number");
@@ -120,7 +125,7 @@ export default function ChatApp({ user, setUser }) {
     }
   };
 
-  /* ------------------- TYPING INDICATOR ------------------- */
+  /* ---------------- TYPING ---------------- */
   useEffect(() => {
     if (!socket) return;
 
@@ -150,7 +155,7 @@ export default function ChatApp({ user, setUser }) {
     }, 1000);
   };
 
-  /* ------------------- SEND MESSAGE ------------------- */
+  /* ---------------- SEND MESSAGE ---------------- */
   const sendMessage = () => {
     if (!text || !selectedUser || !socket) return;
 
@@ -164,7 +169,7 @@ export default function ChatApp({ user, setUser }) {
     setTypingUser(null);
   };
 
-  /* ------------------- DELETE MESSAGE ------------------- */
+  /* ---------------- DELETE MESSAGE ---------------- */
   const handlePressStart = (messageId, receiverId) => {
     pressTimer.current = setTimeout(() => {
       if (window.confirm("Delete this message?")) {
@@ -180,7 +185,7 @@ export default function ChatApp({ user, setUser }) {
     setMessages((prev) => prev.filter((m) => m._id !== messageId));
   };
 
-  /* ------------------- LOGOUT ------------------- */
+  /* ---------------- LOGOUT ---------------- */
   const logout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
@@ -188,15 +193,16 @@ export default function ChatApp({ user, setUser }) {
     navigate("/login");
   };
 
-  /* ------------------- MOBILE BACK ------------------- */
+  /* ---------------- MOBILE BACK ---------------- */
   const goBack = () => {
     setShowLeftPanel(true);
     setShowRightPanel(false);
   };
 
-  /* ------------------- UI ------------------- */
+  /* ---------------- UI ---------------- */
   return (
     <div className="chat-container">
+
       {/* LEFT PANEL */}
       <div className={`left-panel ${showLeftPanel ? "show" : "hide"}`}>
         <div className="search-box">
@@ -249,6 +255,7 @@ export default function ChatApp({ user, setUser }) {
                 }`}
               >
                 {m.text}
+
                 {m.senderId === userId && (
                   <div className="tick">
                     {!m.delivered && !m.seen && <span>✔</span>}

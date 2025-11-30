@@ -17,22 +17,20 @@ import Message from "./models/Message.js";
 dotenv.config();
 connectDB();
 
-// ---------- PATH FIX FOR RENDER ----------
+// ---------- PATH FIX ----------
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// ---------- ALLOWED ORIGINS ----------
-const allowedOrigins = [
-  process.env.CLIENT_URL,                 // Your Render frontend URL
-  "https://chat-app-hwvk.onrender.com",   // Fallback
-].filter(Boolean);
+// ---------- FINAL SINGLE ORIGIN ----------
+const FRONTEND_URL =
+  process.env.CLIENT_URL || "https://chat-app-hwvk.onrender.com";
 
 // ---------- EXPRESS ----------
 const app = express();
 
 app.use(
   cors({
-    origin: allowedOrigins,
+    origin: FRONTEND_URL,
     credentials: true,
   })
 );
@@ -58,7 +56,8 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: allowedOrigins,
+    origin: FRONTEND_URL,
+    methods: ["GET", "POST"],
     credentials: true,
   },
   transports: ["websocket", "polling"],
@@ -114,13 +113,11 @@ io.on("connection", async (socket) => {
         seen: message.seen,
       };
 
-      // Send to receiver (if online)
       if (receiver.socketId) {
         io.to(receiver.socketId).emit("receiveMessage", payload);
         io.to(socket.id).emit("messageDelivered", { messageId: payload._id });
       }
 
-      // Always send to sender
       io.to(socket.id).emit("receiveMessage", payload);
     } catch (err) {
       console.error("Send message error:", err);
@@ -132,14 +129,12 @@ io.on("connection", async (socket) => {
     try {
       await Message.findByIdAndDelete(messageId);
 
-      // notify receiver
       if (receiverId) {
         const receiver = await User.findById(receiverId);
         if (receiver?.socketId)
           io.to(receiver.socketId).emit("messageDeleted", messageId);
       }
 
-      // notify sender
       io.to(socket.id).emit("messageDeleted", messageId);
     } catch (err) {
       console.error("Delete message error:", err);
@@ -204,7 +199,7 @@ app.get("/api/messages/:otherUserId", async (req, res) => {
     }).sort({ createdAt: 1 });
 
     res.json(messages);
-  } catch (err) {
+  } catch {
     res.json([]);
   }
 });
