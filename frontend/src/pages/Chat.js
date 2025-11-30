@@ -7,7 +7,7 @@ import "./Chat.css";
 export default function ChatApp({ user, setUser }) {
   const userId = user.id;
 
-  const SOCKET_URL = "https://chat-app-hwvk.onrender.com";   // 🔥 Hardcoded
+  const SOCKET_URL = "https://chat-app-hwvk.onrender.com"; // Hardcoded
   const [socket, setSocket] = useState(null);
   const [chatList, setChatList] = useState([]);
   const [searchPhone, setSearchPhone] = useState("");
@@ -31,47 +31,58 @@ export default function ChatApp({ user, setUser }) {
     setShowRightPanel(!isMobile);
   }, []);
 
-  /* ---------------- SOCKET.IO (Hardcoded URL) ---------------- */
+  /* ---------------- SOCKET ---------------- */
   useEffect(() => {
+    console.log("🔌 Connecting socket to:", SOCKET_URL);
+
     const s = io(SOCKET_URL, {
       transports: ["websocket", "polling"],
       auth: { token: localStorage.getItem("token") },
     });
 
-    s.on("connect", () => setSocket(s));
+    s.on("connect", () => {
+      console.log("🟢 SOCKET CONNECTED:", s.id);
+      setSocket(s);
+    });
 
     s.on("receiveMessage", (msg) => {
+      console.log("⚡ SOCKET receiveMessage:", msg);
+      console.log("📌 selectedUser:", selectedUser);
+
       if (!selectedUser) return;
+
       if (msg.senderId === selectedUser._id || msg.receiverId === selectedUser._id) {
         setMessages((prev) => [...prev, msg]);
       }
     });
 
     s.on("messageDeleted", (messageId) => {
+      console.log("⚡ SOCKET messageDeleted:", messageId);
       setMessages((prev) => prev.filter((m) => m._id !== messageId));
     });
 
     s.on("messageSeen", ({ messageIds }) => {
+      console.log("⚡ SOCKET messageSeen:", messageIds);
       setMessages((prev) =>
         prev.map((m) =>
-          messageIds.includes(m._id)
-            ? { ...m, seen: true }
-            : m
+          messageIds.includes(m._id) ? { ...m, seen: true } : m
         )
       );
     });
 
     s.on("messageDelivered", ({ messageId }) => {
+      console.log("⚡ SOCKET messageDelivered:", messageId);
       setMessages((prev) =>
         prev.map((m) =>
-          m._id === messageId
-            ? { ...m, delivered: true }
-            : m
+          m._id === messageId ? { ...m, delivered: true } : m
         )
       );
     });
 
-    return () => s.disconnect();
+    return () => {
+      console.log("🔌 SOCKET DISCONNECTED");
+      s.disconnect();
+    };
   }, [selectedUser]);
 
   /* ---------------- FETCH CHAT LIST ---------------- */
@@ -79,15 +90,20 @@ export default function ChatApp({ user, setUser }) {
     const fetchChats = async () => {
       try {
         const res = await API.get(`/chats/${userId}`);
+
+        console.log("📥 /chats RESPONSE:", res.data);
+        console.log("📌 Is chats array?", Array.isArray(res.data));
+
         setChatList(Array.isArray(res.data) ? res.data : []);
-      } catch {
+      } catch (err) {
+        console.log("❌ /chats ERROR:", err);
         setChatList([]);
       }
     };
     fetchChats();
   }, [userId]);
 
-  /* ---------------- AUTO SCROLL ---------------- */
+  /* ---------------- SCROLL ---------------- */
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -99,8 +115,9 @@ export default function ChatApp({ user, setUser }) {
 
     try {
       const res = await API.get(`/auth/findByPhone/${target}`);
-      const u = res.data;
+      console.log("📥 findByPhone RESPONSE:", res.data);
 
+      const u = res.data;
       setSelectedUser(u);
 
       if (!chatList.find((c) => c._id === u._id)) {
@@ -108,6 +125,10 @@ export default function ChatApp({ user, setUser }) {
       }
 
       const msgs = await API.get(`/messages/${u._id}?currentUserId=${userId}`);
+
+      console.log("📥 /messages RESPONSE:", msgs.data);
+      console.log("📌 Is messages array?", Array.isArray(msgs.data));
+
       setMessages(Array.isArray(msgs.data) ? msgs.data : []);
       setSearchPhone("");
 
@@ -120,7 +141,8 @@ export default function ChatApp({ user, setUser }) {
         setShowLeftPanel(false);
         setShowRightPanel(true);
       }
-    } catch {
+    } catch (err) {
+      console.log("❌ startChat ERROR:", err);
       alert("User not found");
     }
   };
@@ -129,8 +151,15 @@ export default function ChatApp({ user, setUser }) {
   useEffect(() => {
     if (!socket) return;
 
-    socket.on("typing", ({ senderId }) => setTypingUser(senderId));
-    socket.on("stopTyping", () => setTypingUser(null));
+    socket.on("typing", ({ senderId }) => {
+      console.log("⌨️ typing event:", senderId);
+      setTypingUser(senderId);
+    });
+
+    socket.on("stopTyping", () => {
+      console.log("⌨️ stopTyping event");
+      setTypingUser(null);
+    });
 
     return () => {
       socket.off("typing");
@@ -159,6 +188,8 @@ export default function ChatApp({ user, setUser }) {
   const sendMessage = () => {
     if (!text || !selectedUser || !socket) return;
 
+    console.log("📤 Sending message:", text);
+
     socket.emit("sendMessage", {
       receiverPhone: selectedUser.phone,
       text,
@@ -181,6 +212,7 @@ export default function ChatApp({ user, setUser }) {
   const handlePressEnd = () => clearTimeout(pressTimer.current);
 
   const deleteMessage = (messageId, receiverId) => {
+    console.log("🗑️ Deleting message:", messageId);
     socket?.emit("deleteMessage", { messageId, receiverId });
     setMessages((prev) => prev.filter((m) => m._id !== messageId));
   };
@@ -193,15 +225,11 @@ export default function ChatApp({ user, setUser }) {
     navigate("/login");
   };
 
-  /* ---------------- MOBILE BACK ---------------- */
-  const goBack = () => {
-    setShowLeftPanel(true);
-    setShowRightPanel(false);
-  };
-
   /* ---------------- UI ---------------- */
   return (
     <div className="chat-container">
+      {/* Debug final messages before map */}
+      {console.log("🧪 FINAL messages before map:", messages)}
 
       {/* LEFT PANEL */}
       <div className={`left-panel ${showLeftPanel ? "show" : "hide"}`}>
@@ -235,7 +263,10 @@ export default function ChatApp({ user, setUser }) {
       {/* RIGHT PANEL */}
       <div className={`right-panel ${showRightPanel ? "show" : "hide"}`}>
         {window.innerWidth <= 768 && selectedUser && (
-          <button className="back-btn" onClick={goBack}>← Back</button>
+          <button className="back-btn" onClick={() => {
+            setShowLeftPanel(true);
+            setShowRightPanel(false);
+          }}>← Back</button>
         )}
 
         <div className="messages-area">
