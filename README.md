@@ -11,30 +11,30 @@ A full-stack real-time chat application where users can communicate using unique
 
 Users can:
 
-1.Sign up and log in securely
+1. Sign up and log in securely
 
-2.Use their phone number as a unique chat identifier
+2. Use their phone number as a unique chat identifier
 
-3.Start conversations with other registered users via number
+3. Start conversations with other registered users via number
 
-4.Exchange messages in real-time
+4. Exchange messages in real-time
 
-5.Chat with multiple AI personas (Friendly, Sarcastic, etc.)
+5. Chat with multiple AI personas (Friendly, Sarcastic, etc.)
 
-6.Experience instant message delivery using Socket.io
+6. Experience instant message delivery using Socket.io
 
 7.The system simulates modern messaging platforms while integrating AI-driven conversational agents.
 
 # ✨ Key Features
-1.🔐 Authentication
+1. 🔐 Authentication
 
-2.Secure Sign Up & Login
+2. Secure Sign Up & Login
 
-3.JWT-based authentication
+3. JWT-based authentication
 
-4.Phone number used as unique user ID
+4. Phone number used as unique user ID
 
-5.💬 Real-Time Messaging
+5. 💬 Real-Time Messaging
 
 6.Instant message exchange using Socket.io
 
@@ -44,47 +44,35 @@ Users can:
 
 # 🤖 AI Persona Chat
 
-1.Multiple AI personalities
+1. Multiple AI personalities
 
-2.Powered by OpenRouter API
+2. Powered by OpenRouter API
 
-3.Dynamic response behavior per persona
+3. Dynamic response behavior per persona
 
-🗂 Message Storage
+# 🗂 Message Storage
 
-Messages stored in MongoDB
+1. Messages stored in MongoDB
 
-Persistent chat history
+2. Persistent chat history
 
-Structured conversation schema
+3. Structured conversation schema
 
-🛠 Tech Stack
-Frontend
+# 🛠 Tech Stack
 
+# Frontend
 React.js
-
 Axios
-
 Socket.io-client
-
 CSS
 
-Backend
-
+# Backend
 Node.js
-
 Express.js
-
 Socket.io
-
 MongoDB (Atlas)
-
 JWT Authentication
-
 AI Integration
-
 OpenRouter API
-
 Deployment
-
 Render
