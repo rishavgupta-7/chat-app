@@ -36,11 +36,11 @@ Users can:
 
 5. 💬 Real-Time Messaging
 
-6.Instant message exchange using Socket.io
+6. Instant message exchange using Socket.io
 
-7.Bidirectional communication
+7. Bidirectional communication
 
-8.Live message updates across clients
+8. Live message updates across clients
 
 # 🤖 AI Persona Chat
 
@@ -61,18 +61,18 @@ Users can:
 # 🛠 Tech Stack
 
 # Frontend
-React.js
-Axios
-Socket.io-client
-CSS
+React.js,
+Axios,
+Socket.io-client,
+CSS,
 
 # Backend
-Node.js
-Express.js
-Socket.io
-MongoDB (Atlas)
-JWT Authentication
-AI Integration
-OpenRouter API
-Deployment
+Node.js,
+Express.js,
+Socket.io,
+MongoDB (Atlas),
+JWT Authentication,
+AI Integration,
+OpenRouter API,
+Deployment,
 Render
