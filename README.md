@@ -1,5 +1,4 @@
- Real-Time Chat Application with AI Personas
-
+# Real-Time Chat Application with AI Personas
 A full-stack real-time chat application where users can communicate using unique phone numbers and interact with multiple AI personas powered by OpenRouter API.
 
 🚀 Live Demo
@@ -8,48 +7,48 @@ A full-stack real-time chat application where users can communicate using unique
 
 📖 Overview
 
-This project is a full-stack real-time chat application built using the MERN stack with WebSocket-based communication.
+# This project is a full-stack real-time chat application built using the MERN stack with WebSocket-based communication.
 
 Users can:
 
-Sign up and log in securely
+1.Sign up and log in securely
 
-Use their phone number as a unique chat identifier
+2.Use their phone number as a unique chat identifier
 
-Start conversations with other registered users via number
+3.Start conversations with other registered users via number
 
-Exchange messages in real-time
+4.Exchange messages in real-time
 
-Chat with multiple AI personas (Friendly, Sarcastic, etc.)
+5.Chat with multiple AI personas (Friendly, Sarcastic, etc.)
 
-Experience instant message delivery using Socket.io
+6.Experience instant message delivery using Socket.io
 
-The system simulates modern messaging platforms while integrating AI-driven conversational agents.
+7.The system simulates modern messaging platforms while integrating AI-driven conversational agents.
 
-✨ Key Features
-🔐 Authentication
+# ✨ Key Features
+1.🔐 Authentication
 
-Secure Sign Up & Login
+2.Secure Sign Up & Login
 
-JWT-based authentication
+3.JWT-based authentication
 
-Phone number used as unique user ID
+4.Phone number used as unique user ID
 
-💬 Real-Time Messaging
+5.💬 Real-Time Messaging
 
-Instant message exchange using Socket.io
+6.Instant message exchange using Socket.io
 
-Bidirectional communication
+7.Bidirectional communication
 
-Live message updates across clients
+8.Live message updates across clients
 
-🤖 AI Persona Chat
+# 🤖 AI Persona Chat
 
-Multiple AI personalities
+1.Multiple AI personalities
 
-Powered by OpenRouter API
+2.Powered by OpenRouter API
 
-Dynamic response behavior per persona
+3.Dynamic response behavior per persona
 
 🗂 Message Storage
 
