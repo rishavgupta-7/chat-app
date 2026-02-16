@@ -67,7 +67,7 @@ Socket.io-client,
 CSS,
 
 # Backend
-Node.js,
+Node.js
 Express.js,
 Socket.io,
 MongoDB (Atlas),
