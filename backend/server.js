@@ -263,6 +263,11 @@ app.get("/api/chats/:userId", async (req, res) => {
   }
 });
 
+// Lightweight health endpoint
+app.get("/health", (req, res) => {
+  res.status(200).send("OK");
+});
+
 // --------------------------------------------------
 // SERVE FRONTEND BUILD (FIXED PATH)
 // --------------------------------------------------
