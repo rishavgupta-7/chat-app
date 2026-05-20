@@ -46,7 +46,7 @@ router.post("/chat", async (req, res) => {
   try {
     // API Payload
     const payload = {
-      model: "openai/gpt-oss-20b:free",
+      model: "openai/gpt-oss-120b:free",
       messages: finalMessages
     };
 
